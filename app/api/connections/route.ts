@@ -1,0 +1,1 @@
+import { NextResponse } from 'next/server'; import { cookies } from 'next/headers'; export async function GET(){ const c=cookies(); const google=c.get('google_connected')?.value==='1'; const microsoft=c.get('ms_connected')?.value==='1'; return NextResponse.json({ google, microsoft }); }
