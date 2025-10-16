@@ -1,10 +1,3 @@
-'use client';
-
-export default function AppHome() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 28 }}>Aurora EA — App Route OK</h1>
-      <p>If you can read this at /app, routing is fixed.</p>
-    </main>
-  );
-}
+<Link href="/dashboard" className="inline-block px-4 py-2 rounded-xl bg-[#3A8DFF] text-white">
+  Open the App
+</Link>
