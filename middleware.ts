@@ -5,9 +5,9 @@ export function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
   const host = req.headers.get('host') || '';
 
-  // When visiting app.zaisync.ai at "/", serve the dashboard at /app
+  // On app.zaisync.ai, rewrite "/" to "/dashboard"
   if (host === 'app.zaisync.ai' && url.pathname === '/') {
-    url.pathname = '/app';
+    url.pathname = '/dashboard';
     return NextResponse.rewrite(url);
   }
   return NextResponse.next();
