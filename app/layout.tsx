@@ -2,7 +2,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'Aurora EA',
-  description: 'Enterprise-secure executive assistant',
+  description: 'enterprise-secure executive assistant',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
