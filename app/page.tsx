@@ -1,3 +1,10 @@
-<Link href="/dashboard" className="inline-block px-4 py-2 rounded-xl bg-[#3A8DFF] text-white">
-  Open the App
-</Link>
+'use client';
+
+export default function Dashboard() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 28, marginBottom: 12 }}>Aurora EA — Dashboard</h1>
+      <p>If you can see this, the /dashboard route is working!</p>
+    </main>
+  );
+}
