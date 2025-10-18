@@ -1,20 +1,19 @@
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    "plugins": [{ "name": "next" }]
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  experimental: {
+    appDir: true, // Enables /app directory routing (for Next 13+)
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
-}
+  // Optional: add redirects or rewrites if needed
+  // async redirects() {
+  //   return [
+  //     {
+  //       source: '/',
+  //       destination: '/dashboard',
+  //       permanent: false,
+  //     },
+  //   ];
+  // },
+};
+
+module.exports = nextConfig;
