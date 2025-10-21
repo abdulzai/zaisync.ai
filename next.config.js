@@ -1,10 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Add redirects/rewrites only if you really need them.
-  // async redirects() {
-  //   return [{ source: '/', destination: '/dashboard', permanent: false }];
-  // },
+  // Add redirects/rewrites later only if you want / -> /dashboard, etc.
 };
 
 module.exports = nextConfig;
