@@ -3,11 +3,9 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
-
   if (!code) {
     return NextResponse.json({ error: 'Missing OAuth code' }, { status: 400 });
   }
-
-  // Normally you'd exchange code for tokens here with Google
+  // Here you would exchange `code` for tokens with Google
   return NextResponse.json({ success: true, provider: 'google', code });
 }
