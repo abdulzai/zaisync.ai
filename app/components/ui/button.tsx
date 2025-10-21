@@ -1,19 +1,23 @@
-'use client';
 import * as React from 'react';
+import clsx from 'clsx';
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'solid' | 'outline';
+  variant?: 'primary' | 'ghost';
 };
 
-export function Button({ className = '', variant = 'solid', ...props }: ButtonProps) {
-  const base =
-    'px-4 py-2 rounded-xl text-sm transition';
-  const solid = 'bg-[#3A8DFF] text-white hover:opacity-90';
-  const outline = 'border border-[#E2E6EA] text-[#1C1E22] bg-white hover:bg-[#F9FAFB]';
+export function Button({ className, variant = 'primary', ...props }: ButtonProps) {
+  const styles =
+    variant === 'primary'
+      ? 'bg-blue-600 text-white hover:bg-blue-700'
+      : 'bg-transparent text-slate-700 hover:bg-slate-100';
 
   return (
     <button
-      className={`${base} ${variant === 'outline' ? outline : solid} ${className}`}
+      className={clsx(
+        'inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition-colors',
+        styles,
+        className
+      )}
       {...props}
     />
   );
