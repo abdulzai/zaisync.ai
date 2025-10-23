@@ -1,24 +1,16 @@
-import * as React from 'react';
-import clsx from 'clsx';
+import React from 'react';
 
-export function Card({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+type DivProps = React.HTMLAttributes<HTMLDivElement>;
+
+export function Card({ className = '', ...props }: DivProps) {
   return (
     <div
-      className={clsx(
-        'rounded-2xl border border-gray-200 shadow-sm bg-white',
-        className
-      )}
+      className={`rounded-xl border border-gray-200 bg-white shadow-sm ${className}`}
       {...props}
     />
   );
 }
 
-export function CardContent({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={clsx('p-6', className)} {...props} />;
+export function CardContent({ className = '', ...props }: DivProps) {
+  return <div className={`p-4 ${className}`} {...props} />;
 }
