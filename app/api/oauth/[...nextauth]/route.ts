@@ -22,14 +22,15 @@ const handler = NextAuth({
       tenantId: process.env.AZURE_AD_TENANT_ID || "common",
       authorization: {
         params: {
-          scope: "openid email profile offline_access https://graph.microsoft.com/Mail.Read",
+          scope:
+            "openid email profile offline_access https://graph.microsoft.com/Mail.Read",
         },
       },
     }),
   ],
   callbacks: {
     async session({ session, token }) {
-      session.provider = token.provider as string | undefined;
+      (session as any).provider = token.provider as string | undefined;
       return session;
     },
     async jwt({ token, account }) {
