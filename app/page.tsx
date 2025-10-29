@@ -1,8 +1,4 @@
-// Server component wrapper
-export const dynamic = 'force-dynamic';
-
-import DashboardClient from './DashboardClient';
-
-export default function Page() {
-  return <DashboardClient />;
+import { redirect } from 'next/navigation';
+export default function Home() {
+  redirect('/dashboard');
 }
