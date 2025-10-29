@@ -1,5 +1,8 @@
-import { redirect } from "next/navigation";
+// Server component wrapper
+export const dynamic = 'force-dynamic';
 
-export default function Home() {
-  redirect("/dashboard");
+import DashboardClient from './DashboardClient';
+
+export default function Page() {
+  return <DashboardClient />;
 }
