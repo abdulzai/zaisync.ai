@@ -1,18 +1,23 @@
+// app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import AzureADProvider from "next-auth/providers/azure-ad";
+import type { NextAuthOptions } from "next-auth";
 
-const handler = NextAuth({
+export const runtime = "nodejs"; // safer for NextAuth in App Router
+
+const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
           scope:
             "openid email profile https://www.googleapis.com/auth/gmail.readonly",
-          access_type: "offline",
-          prompt: "consent",
         },
       },
     }),
@@ -22,23 +27,18 @@ const handler = NextAuth({
       tenantId: process.env.AZURE_AD_TENANT_ID || "common",
       authorization: {
         params: {
-          scope:
-            "openid email profile offline_access https://graph.microsoft.com/Mail.Read",
+          scope: "openid email profile offline_access Mail.Read",
         },
       },
     }),
   ],
-  callbacks: {
-    async session({ session, token }) {
-      (session as any).provider = token.provider as string | undefined;
-      return session;
-    },
-    async jwt({ token, account }) {
-      if (account?.provider) token.provider = account.provider;
-      return token;
-    },
-  },
   secret: process.env.NEXTAUTH_SECRET,
-});
+  session: { strategy: "jwt" },
+  pages: {
+    // optional custom pages
+    // signIn: "/dashboard"
+  },
+};
 
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
