@@ -1,36 +1,30 @@
+// app/api/gmail/unread/route.ts
 import { NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import { google } from "googleapis";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export const runtime = "nodejs";
+export async function GET() {
+  const session = await getServerSession(authOptions);
 
-export async function GET(req: Request) {
-  const token = await getToken({ req: req as any, raw: false });
-  if (!token || !token.accessToken) {
+  // Not signed in with Google
+  const accessToken = (session as any)?.access_token as string | undefined;
+  if (!accessToken) {
     return NextResponse.json({ connected: false, unread: 0 }, { status: 200 });
   }
 
-  try {
-    const oauth2 = new google.auth.OAuth2();
-    oauth2.setCredentials({
-      access_token: token.accessToken as string,
-      // If you added refresh_token in NextAuth callbacks, you can pass it here too
-      // refresh_token: token.refreshToken as string,
-    });
+  // Ask Gmail for the UNREAD label (contains messagesUnread)
+  const res = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/labels/UNREAD",
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
 
-    const gmail = google.gmail({ version: "v1", auth: oauth2 });
-
-    // Query unread in INBOX
-    const res = await gmail.users.messages.list({
-      userId: "me",
-      q: "in:inbox is:unread",
-      maxResults: 1, // we only need the count
-    });
-
-    const unread = (res.data.resultSizeEstimate ?? 0);
-    return NextResponse.json({ connected: true, unread });
-  } catch (e: any) {
-    // When token lacks scope or expired you’ll land here
-    return NextResponse.json({ connected: false, unread: 0, error: e?.message }, { status: 200 });
+  if (!res.ok) {
+    // token may be missing/expired/insufficient scopes; UI will show "Connect Gmail"
+    return NextResponse.json({ connected: false, unread: 0 }, { status: 200 });
   }
+
+  const label = await res.json();
+  const unread = Number(label?.messagesUnread ?? 0);
+
+  return NextResponse.json({ connected: true, unread }, { status: 200 });
 }
