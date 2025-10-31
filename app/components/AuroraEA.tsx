@@ -3,6 +3,16 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
+const { data: session } = useSession();
+const [connected, setConnected] = useState(false);
+
+useEffect(() => {
+  // Check if Gmail API returns a successful connection
+  fetch("/api/gmail/unread")
+    .then(res => res.json())
+    .then(data => setConnected(data.connected))
+    .catch(() => setConnected(false));
+}, []);
 
 export default function AuroraEA() {
   const [connected, setConnected] = useState(false);
