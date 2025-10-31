@@ -2,6 +2,20 @@
 
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
+import { useEffect, useState } from "react";
+
+export default function DashboardClient() {
+  const [unread, setUnread] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/gmail/unread")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.connected) setUnread(data.unread);
+        else setUnread(null);
+      })
+      .catch(() => setUnread(null));
+  }, []);
 
 export default function DashboardClient() {
   const { data: session, status } = useSession();
@@ -43,7 +57,10 @@ export default function DashboardClient() {
 
         <div className="rounded border p-4">
           <div className="text-sm text-neutral-500">Unread Emails</div>
-          <div className="text-4xl font-bold mt-2">24</div>
+          <div className="text-4xl font-bold mt-2">
+          {unread === null ? "—" : unread}
+        </div>
+
           <div className="text-xs text-neutral-500 mt-1">Gmail + Outlook</div>
         </div>
 
