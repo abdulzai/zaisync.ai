@@ -1,7 +1,6 @@
-// Server component wrapper
-export const dynamic = 'force-dynamic';
+import DashboardClient from "./DashboardClient";
 
-import DashboardClient from './DashboardClient';
+export const dynamic = "force-dynamic"; // avoid static caching during tests
 
 export default function Page() {
   return <DashboardClient />;
