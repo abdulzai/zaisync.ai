@@ -1,35 +1,37 @@
 // app/api/gmail/unread/route.ts
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../lib/authOptions";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
+// Ensure Node runtime (gmail API call uses node fetch/HTTP)
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+export async function GET() {
+  // Get the NextAuth session (must include access_token from Google)
+  const session = await getServerSession(authOptions as any);
+
   const accessToken = (session as any)?.access_token as string | undefined;
-
-  // Not signed in with Google or no token -> show disconnected with 0 unread
   if (!accessToken) {
+    // Not connected to Google yet
     return NextResponse.json({ connected: false, unread: 0 }, { status: 200 });
   }
 
-  // Ask Gmail for the UNREAD label
+  // Call Gmail to read the UNREAD label (this contains messagesUnread)
   const res = await fetch(
     "https://gmail.googleapis.com/gmail/v1/users/me/labels/UNREAD",
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    }
+    { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
-  // If token is missing/expired/insufficient scopes, we still answer connected=true
   if (!res.ok) {
-    return NextResponse.json({ connected: true, unread: 0 }, { status: 200 });
+    // Token may be expired / missing scope — let the UI prompt “Connect Gmail”
+    return NextResponse.json(
+      { connected: false, unread: 0 },
+      { status: res.status }
+    );
   }
 
   const label = await res.json();
   const unread = Number(label?.messagesUnread ?? 0);
+
   return NextResponse.json({ connected: true, unread }, { status: 200 });
 }
