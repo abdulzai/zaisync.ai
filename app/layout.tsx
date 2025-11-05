@@ -1,4 +1,4 @@
-import './globals.css';
+import "./globals.css";
 import { headers } from 'next/headers';
 import { Providers } from './providers';
 
