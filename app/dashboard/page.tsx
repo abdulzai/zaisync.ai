@@ -1,7 +1,12 @@
-import DashboardClient from "./DashboardClient";
+import AuroraEA from '@/app/components/AuroraEA';
 
-export const dynamic = "force-dynamic"; // avoid static caching during tests
+export const dynamic = 'force-dynamic';
 
-export default function Page() {
-  return <DashboardClient />;
+export default function DashboardPage() {
+  return (
+    <main className="p-6">
+      <h1 className="text-2xl font-semibold mb-6">Aurora EA — Dashboard</h1>
+      <AuroraEA />
+    </main>
+  );
 }
