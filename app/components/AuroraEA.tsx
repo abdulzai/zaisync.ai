@@ -5,10 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 
-type UnreadResponse = {
-  connected: boolean;
-  unread: number;
-};
+type UnreadResponse = { connected: boolean; unread: number };
 
 export default function AuroraEA() {
   const { data: session } = useSession();
