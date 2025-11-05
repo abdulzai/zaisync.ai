@@ -1,4 +1,4 @@
-import AuroraEA from '@/app/components/AuroraEA';
+import AuroraEA from '@/components/AuroraEA';
 
 export const dynamic = 'force-dynamic';
 
