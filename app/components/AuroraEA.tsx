@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { Card, CardContent } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+import { Card, CardContent } from './ui/card';
+import { Button } from './ui/button';
 
 export default function AuroraEA() {
   const { data: session } = useSession();
@@ -43,13 +44,11 @@ export default function AuroraEA() {
                 {connected ? 'Gmail connected' : 'Connect Gmail'}
               </div>
             </div>
+
             {!connected && (
-              <Button
-                asChild
-                className="mt-2"
-              >
-                <a href="/api/auth/signin/google">Connect Gmail</a>
-              </Button>
+              <Link href="/api/auth/signin/google">
+                <Button className="mt-2">Connect Gmail</Button>
+              </Link>
             )}
           </div>
         </CardContent>
