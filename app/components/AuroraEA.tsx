@@ -46,10 +46,10 @@ export default function AuroraEA() {
             </div>
 
             {!connected && (
-              <Link href="/api/auth/signin/google">
-                <Button className="mt-2">Connect Gmail</Button>
-              </Link>
-            )}
+  <Link href="/api/auth/signin/google">
+    <Button className="mt-2">Connect Gmail</Button>
+  </Link>
+)}
           </div>
         </CardContent>
       </Card>
