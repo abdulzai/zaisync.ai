@@ -1,111 +1,63 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { Card, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
 
 export default function AuroraEA() {
   const { data: session } = useSession();
-
-  // Gmail connection status + unread count from our API
-  const [gmailConnected, setGmailConnected] = useState<boolean | null>(null);
-  const [unread, setUnread] = useState<number>(0);
+  const [connected, setConnected] = useState(false);
+  const [unread, setUnread] = useState<number | null>(null);
 
   useEffect(() => {
     let ignore = false;
-    async function checkGmail() {
+    async function load() {
       try {
-        const r = await fetch('/api/gmail/unread', { cache: 'no-store' });
-        const j = await r.json();
+        const res = await fetch('/api/gmail/unread', { cache: 'no-store' });
+        const json = await res.json();
         if (!ignore) {
-          setGmailConnected(Boolean(j.connected));
-          setUnread(typeof j.unread === 'number' ? j.unread : 0);
+          setConnected(Boolean(json?.connected));
+          setUnread(typeof json?.unread === 'number' ? json.unread : 0);
         }
       } catch {
         if (!ignore) {
-          setGmailConnected(false);
+          setConnected(false);
           setUnread(0);
         }
       }
     }
-    checkGmail();
-    const id = setInterval(checkGmail, 30_000);
-    return () => {
-      ignore = true;
-      clearInterval(id);
-    };
+    load();
+    return () => { ignore = true; };
   }, []);
 
   return (
     <div className="space-y-6">
-      {/* 3 cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Tasks */}
-        <div className="rounded-lg border p-4">
-          <div className="text-sm text-gray-500">Today’s Tasks</div>
-          <div className="text-4xl font-bold mt-2">8</div>
-          <div className="text-xs text-gray-400 mt-1">3 urgent</div>
-        </div>
-
-        {/* Unread Emails + connect pill */}
-        <div className="rounded-lg border p-4">
+      <Card>
+        <CardContent className="p-6">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-500">Unread Emails</div>
-
-            {/* Top-right small Connect / Reconnect button */}
-            {gmailConnected ? (
-              <a
-                href="/api/auth/signin/google"
-                className="text-xs rounded-md border px-2 py-1 hover:bg-gray-50"
+            <div>
+              <div className="text-sm text-muted-foreground">Unread Emails</div>
+              <div className="text-3xl font-bold mt-2">{unread ?? 0}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {connected ? 'Gmail connected' : 'Connect Gmail'}
+              </div>
+            </div>
+            {!connected && (
+              <Button
+                asChild
+                className="mt-2"
               >
-                Reconnect Gmail
-              </a>
-            ) : (
-              <a
-                href="/api/auth/signin/google"
-                className="text-xs rounded-md border px-2 py-1 hover:bg-gray-50"
-              >
-                Connect Gmail
-              </a>
+                <a href="/api/auth/signin/google">Connect Gmail</a>
+              </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="text-4xl font-bold mt-2">{unread}</div>
-          <div className="text-xs text-gray-400 mt-1">
-            {gmailConnected ? 'Gmail connected' : 'Not connected'}
-          </div>
-        </div>
-
-        {/* Meetings */}
-        <div className="rounded-lg border p-4">
-          <div className="text-sm text-gray-500">Meetings</div>
-          <div className="text-4xl font-bold mt-2">5</div>
-          <div className="text-xs text-gray-400 mt-1">Next 24 hours</div>
-        </div>
-      </div>
-
-      {/* Quick Actions row (keeps your two existing buttons) */}
       <div className="flex gap-3">
-        <a
-          href="/api/ai/recap" // or keep your existing target for the blue button
-          className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          Schedule client recap
-        </a>
-
-        <a
-          href="/api/approve"
-          className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-        >
-          Draft vendor update
-        </a>
-
-        {/* Optional Outlook placeholder; hide until Entra ID is ready */}
-        {/* <a
-          href="/api/auth/signin/azure-ad"
-          className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-        >
-          Connect Outlook
-        </a> */}
+        <Button>Schedule client recap</Button>
+        <Button variant="outline">Draft vendor update</Button>
       </div>
     </div>
   );
