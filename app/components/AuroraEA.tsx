@@ -50,14 +50,11 @@ export default function AuroraEA() {
     <Button className="mt-2">Connect Gmail</Button>
   </Link>
 )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex gap-3">
+                <div className="flex gap-3">
         <Button>Schedule client recap</Button>
-        <Button variant="outline">Draft vendor update</Button>
+        <Button className="border rounded px-4 py-2 bg-transparent hover:bg-gray-50">
+          Draft vendor update
+        </Button>
       </div>
-    </div>
   );
 }
