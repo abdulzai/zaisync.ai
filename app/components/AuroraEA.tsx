@@ -29,7 +29,9 @@ export default function AuroraEA() {
       }
     }
     load();
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   return (
@@ -46,15 +48,21 @@ export default function AuroraEA() {
             </div>
 
             {!connected && (
-  <Link href="/api/auth/signin/google">
-    <Button className="mt-2">Connect Gmail</Button>
-  </Link>
-)}
-                <div className="flex gap-3">
+              <Link href="/api/auth/signin/google">
+                <Button className="mt-2">Connect Gmail</Button>
+              </Link>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex gap-3">
         <Button>Schedule client recap</Button>
+        {/* no `variant="outline"` — use classes instead */}
         <Button className="border rounded px-4 py-2 bg-transparent hover:bg-gray-50">
           Draft vendor update
         </Button>
       </div>
+    </div>
   );
 }
