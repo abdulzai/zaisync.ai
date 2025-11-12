@@ -1,6 +1,7 @@
 // lib/authOptions.ts
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import AzureADProvider from "next-auth/providers/azure-ad";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -9,6 +10,7 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
+          // read-only Gmail + offline
           scope: [
             "openid",
             "email",
@@ -20,22 +22,38 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
+    AzureADProvider({
+      clientId: process.env.AZURE_AD_CLIENT_ID!,
+      clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
+      tenantId: process.env.AZURE_AD_TENANT_ID!,
+      authorization: {
+        params: {
+          // MS Graph read calendar + offline
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "offline_access",
+            "Calendars.Read",
+          ].join(" "),
+        },
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, account }) {
+      // persist provider access/refresh on first sign-in
       if (account) {
         (token as any).access_token = account.access_token;
-        (token as any).refresh_token = (account as any).refresh_token;
-        (token as any).expires_at = (account as any).expires_at;
+        (token as any).refresh_token = account.refresh_token;
+        (token as any).expires_at = account.expires_at;
       }
       return token;
     },
     async session({ session, token }) {
+      // expose access token to server routes
       (session as any).access_token = (token as any).access_token;
-      (session as any).refresh_token = (token as any).refresh_token;
-      (session as any).expires_at = (token as any).expires_at;
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
 };
