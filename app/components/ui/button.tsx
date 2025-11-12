@@ -1,32 +1,23 @@
-// app/components/ui/button.tsx
 'use client';
-
 import * as React from 'react';
-import { Slot } from '@radix-ui/react-slot';
-
-type Variant = 'solid' | 'outline';
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  asChild?: boolean;
-  variant?: Variant;
+  asChild?: false;
 };
 
-export function Button({
-  asChild,
-  variant = 'solid',
-  className = '',
-  ...props
-}: ButtonProps) {
-  const Comp = asChild ? Slot : 'button';
-
-  const base =
-    'inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded transition-colors';
-  const styles =
-    variant === 'outline'
-      ? 'border bg-transparent hover:bg-gray-50'
-      : 'bg-black text-white hover:bg-black/90';
-
-  return <Comp className={`${base} ${styles} ${className}`} {...props} />;
-}
-
-export default Button;
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className = '', ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={
+          'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium ' +
+          'bg-black text-white hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none ' +
+          className
+        }
+        {...props}
+      />
+    );
+  }
+);
+Button.displayName = 'Button';
