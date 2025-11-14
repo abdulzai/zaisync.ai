@@ -9,38 +9,48 @@ import { Button } from './ui/button';
 export default function AuroraEA() {
   const { data: session } = useSession();
 
-  const [gmailConnected, setGmailConnected] = useState(false);
-  const [unread, setUnread] = useState<number>(0);
-
-  const [msConnected, setMsConnected] = useState(false);
-  const [meetings, setMeetings] = useState<number>(0);
+  // Gmail state
+  const [connectedGmail, setConnectedGmail] = useState(false);
+  const [unread, setUnread] = useState<number | null>(null);
+  const [summary, setSummary] = useState<any | null>(null);
 
   useEffect(() => {
-    // Gmail unread
-    (async () => {
-      try {
-        const r = await fetch('/api/gmail/unread', { cache: 'no-store' });
-        const j = await r.json();
-        setGmailConnected(Boolean(j?.connected));
-        setUnread(typeof j?.unread === 'number' ? j.unread : 0);
-      } catch {
-        setGmailConnected(false);
-        setUnread(0);
-      }
-    })();
+    let ignore = false;
 
-    // Outlook meetings
-    (async () => {
+    async function loadUnread() {
       try {
-        const r = await fetch('/api/outlook/meetings', { cache: 'no-store' });
-        const j = await r.json();
-        setMsConnected(Boolean(j?.connected));
-        setMeetings(typeof j?.meetings === 'number' ? j.meetings : 0);
+        const res = await fetch('/api/gmail/unread', { cache: 'no-store' });
+        const json = await res.json();
+
+        if (!ignore) {
+          setConnectedGmail(Boolean(json?.connected));
+          setUnread(typeof json?.unread === 'number' ? json.unread : 0);
+        }
       } catch {
-        setMsConnected(false);
-        setMeetings(0);
+        if (!ignore) {
+          setConnectedGmail(false);
+          setUnread(0);
+        }
       }
-    })();
+    }
+
+    async function loadSummary() {
+      try {
+        const res = await fetch('/api/gmail/summary', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!ignore) setSummary(json);
+      } catch {
+        // ignore errors for summary, card will just hide details
+      }
+    }
+
+    loadUnread();
+    loadSummary();
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   return (
@@ -48,15 +58,34 @@ export default function AuroraEA() {
       {/* Gmail card */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <div>
               <div className="text-sm text-muted-foreground">Unread Emails</div>
-              <div className="text-3xl font-bold mt-2">{unread}</div>
+              <div className="text-3xl font-bold mt-2">{unread ?? 0}</div>
               <div className="text-xs text-muted-foreground mt-1">
-                {gmailConnected ? 'Gmail connected' : 'Connect Gmail'}
+                {connectedGmail ? 'Gmail connected' : 'Connect Gmail'}
               </div>
+
+              {/* Latest email summary */}
+              {summary?.connected && summary?.hasMail && (
+                <div className="text-xs mt-3 max-w-md space-y-1">
+                  <div>
+                    <span className="font-semibold">From:</span>{' '}
+                    <span>{summary.from}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold">Subject:</span>{' '}
+                    <span>{summary.subject}</span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    {summary.snippet}
+                  </div>
+                </div>
+              )}
             </div>
-            {!gmailConnected && (
+
+            {/* Connect button if not connected */}
+            {!connectedGmail && (
               <Link href="/api/auth/signin/google">
                 <Button className="mt-2">Connect Gmail</Button>
               </Link>
@@ -65,20 +94,18 @@ export default function AuroraEA() {
         </CardContent>
       </Card>
 
-      {/* Outlook card */}
+      {/* Meetings/Outlook placeholder card stays simple for now */}
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm text-muted-foreground">Meetings</div>
-              <div className="text-3xl font-bold mt-2">{meetings}</div>
-              <div className="text-xs text-muted-foreground mt-1">Next 24 hours</div>
+              <div className="text-3xl font-bold mt-2">0</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Next 24 hours
+              </div>
             </div>
-            {!msConnected && (
-              <Link href="/api/auth/signin/azure-ad">
-                <Button className="mt-2">Connect Outlook</Button>
-              </Link>
-            )}
+            <Button className="mt-2">Connect Outlook</Button>
           </div>
         </CardContent>
       </Card>
