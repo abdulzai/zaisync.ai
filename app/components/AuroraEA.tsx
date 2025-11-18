@@ -10,7 +10,9 @@ export default function AuroraEA() {
   const [unread, setUnread] = useState<number | null>(null);
   const [hasMail, setHasMail] = useState<boolean | null>(null);
   const [summary, setSummary] = useState('');
+  const [recapLoading, setRecapLoading] = useState(false);
 
+  // Load Gmail unread + summary
   useEffect(() => {
     let ignore = false;
 
@@ -26,18 +28,16 @@ export default function AuroraEA() {
 
         if (ignore) return;
 
-        // Unread card
         setConnected(Boolean(unreadJson?.connected));
         setUnread(
           typeof unreadJson?.unread === 'number' ? unreadJson.unread : 0
         );
 
-        // Latest email summary
         setHasMail(Boolean(summaryJson?.hasMail));
         setSummary(
           typeof summaryJson?.snippet === 'string' ? summaryJson.snippet : ''
         );
-      } catch (e) {
+      } catch {
         if (ignore) return;
         setConnected(false);
         setUnread(0);
@@ -53,6 +53,39 @@ export default function AuroraEA() {
   }, []);
 
   const unreadDisplay = unread ?? 0;
+
+  // === AI Recap handler ===
+  async function handleScheduleRecap() {
+    const input = prompt(
+      'Paste client call / meeting bullet points (separate with ";" )'
+    );
+    if (!input) return;
+
+    const bullets = input
+      .split(';')
+      .map((b) => b.trim())
+      .filter(Boolean);
+
+    if (bullets.length === 0) return;
+
+    try {
+      setRecapLoading(true);
+      const res = await fetch('/api/ai/recap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bullets }),
+      });
+
+      const json = await res.json();
+      const text = json?.text || 'No recap generated.';
+
+      alert(text);
+    } catch (err) {
+      alert('Error generating recap. Please try again.');
+    } finally {
+      setRecapLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -103,7 +136,9 @@ export default function AuroraEA() {
 
       {/* Quick actions */}
       <div className="flex gap-3 pt-2">
-        <Button>Schedule client recap</Button>
+        <Button onClick={handleScheduleRecap} disabled={recapLoading}>
+          {recapLoading ? 'Generating recap…' : 'Schedule client recap'}
+        </Button>
         <Button>Draft vendor update</Button>
       </div>
     </div>
