@@ -55,7 +55,7 @@ export default function AuroraEA() {
   const unreadDisplay = unread ?? 0;
 
   // === AI Recap handler ===
-  async function handleScheduleRecap() {
+    async function handleScheduleRecap() {
     const input = prompt(
       'Paste client call / meeting bullet points (separate with ";" )'
     );
@@ -77,11 +77,16 @@ export default function AuroraEA() {
       });
 
       const json = await res.json();
-      const text = json?.text || 'No recap generated.';
 
+      if (!res.ok) {
+        alert(`Error from server: ${json?.error || 'Unknown error'}`);
+        return;
+      }
+
+      const text = json?.text || 'No recap generated.';
       alert(text);
-    } catch (err) {
-      alert('Error generating recap. Please try again.');
+    } catch {
+      alert('Network error calling /api/ai/recap.');
     } finally {
       setRecapLoading(false);
     }
