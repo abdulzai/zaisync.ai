@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
+import { authOptions } from "../../../lib/authOptions";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -31,7 +31,7 @@ export async function GET() {
     const details = await Promise.all(
       listJson.messages.map(async (msg: any) => {
         const res = await fetch(
-          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Snippet`,
+          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
           }
