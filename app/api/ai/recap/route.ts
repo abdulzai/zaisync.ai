@@ -1,53 +1,39 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export async function POST(req: Request) {
+  const { bullets } = await req.json();
 
-export async function POST() {
+  const prompt = `Write a short, clear client recap based on these points:\n${bullets
+    .map((b: string, i: number) => `${i + 1}. ${b}`)
+    .join("\n")}`;
+
   try {
-    // 1) Pull real messages
-    const gmailRes = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/gmail/messages`,
-      { cache: "no-store" }
+    const response = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.3,
+        }),
+      }
     );
 
-    const gmail = await gmailRes.json();
-    const messages = gmail.messages || [];
+    const data = await response.json();
 
-    let emailSummary = "No recent client emails found.";
+    const text =
+      data.choices?.[0]?.message?.content || "No recap generated.";
 
-    if (messages.length > 0) {
-      const formatted = messages
-        .map(
-          (m: any, i: number) =>
-            `Email ${i + 1}:\nFrom: ${m.from}\nSubject: ${m.subject}\nSnippet: ${m.snippet}`
-        )
-        .join("\n\n");
-
-      // 2) Summarize with AI
-      const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an executive assistant. Summarize client-related updates clearly, focusing on actions, decisions, and follow-ups.",
-          },
-          {
-            role: "user",
-            content: `Here are the latest Gmail messages:\n\n${formatted}\n\nCreate a short client recap.`,
-          },
-        ],
-      });
-
-      emailSummary = completion.choices[0].message.content;
-    }
-
-    return NextResponse.json({ text: emailSummary });
+    return NextResponse.json({ text });
   } catch (err: any) {
-    console.error(err);
+    console.error("AI RECAP ERROR", err);
     return NextResponse.json(
-      { error: err?.message || "AI recap failed" },
+      { error: err.message ?? "Failed to generate recap" },
       { status: 500 }
     );
   }
