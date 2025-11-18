@@ -25,7 +25,6 @@ export async function POST(req: Request) {
     );
 
     const data = await response.json();
-
     const text =
       data.choices?.[0]?.message?.content || "No recap generated.";
 
