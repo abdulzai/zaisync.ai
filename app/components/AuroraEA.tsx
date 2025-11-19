@@ -6,242 +6,194 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 
-type GmailStatus = {
-  connected: boolean;
-  unread?: number;
-};
-
 export default function AuroraEA() {
   const { data: session } = useSession();
-
-  // Gmail card state
-  const [gmailConnected, setGmailConnected] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [unread, setUnread] = useState<number | null>(null);
+  const [lastRecap, setLastRecap] = useState<string | null>(null);
+  const [loadingRecap, setLoadingRecap] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // Recap modal state
-  const [recapText, setRecapText] = useState<string | null>(null);
-  const [recapOpen, setRecapOpen] = useState(false);
-  const [recapLoading, setRecapLoading] = useState(false);
-  const [recapError, setRecapError] = useState<string | null>(null);
-
-  // ---- GMAIL UNREAD STATUS ----
+  // Load unread count + connection status
   useEffect(() => {
     let ignore = false;
 
-    async function loadGmailStatus() {
+    async function loadUnread() {
       try {
         const res = await fetch('/api/gmail/unread', { cache: 'no-store' });
-        const json: GmailStatus = await res.json();
+        const json = await res.json();
 
         if (!ignore) {
-          setGmailConnected(Boolean(json.connected));
+          setConnected(Boolean(json?.connected));
           setUnread(
-            typeof json.unread === 'number'
+            typeof json?.unread === 'number'
               ? json.unread
               : 0
           );
         }
-      } catch {
+      } catch (err) {
         if (!ignore) {
-          setGmailConnected(false);
+          setConnected(false);
           setUnread(0);
         }
       }
     }
 
-    loadGmailStatus();
+    loadUnread();
     return () => {
       ignore = true;
     };
   }, []);
 
-  // ---- AI CLIENT RECAP ----
-  async function handleGenerateRecap() {
-    setRecapError(null);
-    setRecapLoading(true);
+  // Phase 2: pull recent Gmail messages, turn into bullets, call AI recap
+  async function handleScheduleRecap() {
+    setLoadingRecap(true);
 
     try {
-      // For now: fixed example bullets (later we can pull from Gmail / UI input)
-      const bullets = [
-        'Call with Intersect Power about SOC onboarding dates.',
-        'Need to confirm PRC-028 scope and expectations.',
-        'Send updated Statement of Work (SOW) by Friday.'
-      ];
+      // 1) Get recent messages from our new API
+      const msgRes = await fetch('/api/gmail/messages', { cache: 'no-store' });
+      const msgJson = await msgRes.json();
 
-      const res = await fetch('/api/ai/recap', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ bullets })
-      });
-
-      if (!res.ok) {
-        let message = 'Error generating recap. Please try again.';
-        try {
-          const errJson = await res.json();
-          if (errJson?.error) message = `Error from server: ${errJson.error}`;
-        } catch {
-          // ignore JSON parse errors
-        }
-        throw new Error(message);
+      if (!msgRes.ok || !msgJson.connected) {
+        throw new Error(msgJson.error ?? 'Unable to read Gmail messages.');
       }
 
-      const data = await res.json();
-      const text: string = data.text || 'No recap generated.';
+      const messages: any[] = msgJson.messages ?? [];
 
-      setRecapText(text);
-      setRecapOpen(true);
-    } catch (err: any) {
-      console.error(err);
-      setRecapError(
-        typeof err?.message === 'string'
-          ? err.message
-          : 'Error generating recap. Please try again.'
-      );
-      setRecapOpen(true);
+      if (!messages.length) {
+        window.alert('No recent Gmail messages found to build a recap.');
+        return;
+      }
+
+      // 2) Turn messages into recap bullets for the AI
+      const bullets = messages.slice(0, 5).map((m) => {
+        const from =
+          (m.from ?? '')
+            .split('<')[0]
+            .replace(/"/g, '')
+            .trim() || 'Client';
+
+        const subject = m.subject || 'No subject';
+        return `${from} – ${subject}`;
+      });
+
+      // 3) Call the recap API with those bullets
+      const recapRes = await fetch('/api/ai/recap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bullets }),
+      });
+
+      const recapJson = await recapRes.json();
+
+      if (!recapRes.ok) {
+        throw new Error(recapJson.error ?? 'Failed to generate recap.');
+      }
+
+      setLastRecap(recapJson.text);
+    } catch (err) {
+      console.error('RECAP ERROR', err);
+      window.alert('Error generating recap. Please try again.');
     } finally {
-      setRecapLoading(false);
+      setLoadingRecap(false);
     }
   }
 
   async function handleCopyRecap() {
-    if (!recapText) return;
+    if (!lastRecap) return;
     try {
-      await navigator.clipboard.writeText(recapText);
-      // Optional: tiny feedback – we’ll keep it quiet for now
-      // alert('Recap copied to clipboard');
+      await navigator.clipboard.writeText(lastRecap);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.error('Failed to copy recap:', err);
+      console.error('COPY ERROR', err);
+      window.alert('Could not copy recap to clipboard.');
     }
   }
 
   return (
-    <>
-      <div className="space-y-6">
-        {/* GMAIL CARD */}
+    <div className="space-y-8">
+      {/* Top cards: Gmail + Outlook */}
+      <div className="grid gap-6 md:grid-cols-2">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-muted-foreground">
-                  Unread Emails
-                </div>
-                <div className="text-3xl font-bold mt-2">
-                  {unread ?? 0}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {gmailConnected ? 'Gmail connected' : 'Connect Gmail'}
-                </div>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <div className="text-sm text-muted-foreground">Unread Emails</div>
+              <div className="text-3xl font-bold mt-2">{unread ?? 0}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {connected ? 'Gmail connected' : 'Connect Gmail'}
               </div>
-
-              {!gmailConnected && (
-                <Link href="/api/auth/signin/google">
-                  <Button className="mt-2">
-                    Connect Gmail
-                  </Button>
-                </Link>
-              )}
             </div>
+
+            {!connected && (
+              <Link href="/api/auth/signin/google">
+                <Button className="mt-2">Connect Gmail</Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
 
-        {/* MEETINGS PLACEHOLDER CARD */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-muted-foreground">
-                  Meetings
-                </div>
-                <div className="text-3xl font-bold mt-2">0</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Next 24 hours
-                </div>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <div className="text-sm text-muted-foreground">Meetings</div>
+              <div className="text-3xl font-bold mt-2">0</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Next 24 hours
               </div>
-
-              <Button className="mt-2">
-                Connect Outlook
-              </Button>
             </div>
+
+            <Link href="/api/auth/signin/azure-ad">
+              <Button className="mt-2">Connect Outlook</Button>
+            </Link>
           </CardContent>
         </Card>
-
-        {/* QUICK ACTIONS */}
-        <div className="flex gap-3">
-          <Button
-            onClick={handleGenerateRecap}
-            disabled={recapLoading}
-          >
-            {recapLoading ? 'Generating recap…' : 'Schedule client recap'}
-          </Button>
-
-          <Button>
-            Draft vendor update
-          </Button>
-        </div>
-
-        {/* LAST RECAP PREVIEW */}
-        {recapText && (
-          <Card className="mt-4">
-            <CardContent className="p-4">
-              <div className="text-xs font-semibold mb-1">
-                Last recap
-              </div>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                {recapText}
-              </p>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
-      {/* RECAP MODAL */}
-      {recapOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white text-black max-w-xl w-full rounded-lg shadow-lg p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              Client recap
-            </h2>
+      {/* Quick actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          onClick={handleScheduleRecap}
+          disabled={loadingRecap || !connected}
+        >
+          {loadingRecap ? 'Generating recap…' : 'Schedule client recap'}
+        </Button>
+        <Button variant="outline">
+          Draft vendor update
+        </Button>
+      </div>
 
-            {recapError ? (
-              <p className="text-sm text-red-600 mb-4">
-                {recapError}
+      {/* Recap section */}
+      <Card className="mt-4">
+        <CardContent className="p-6 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Last recap
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyRecap}
+              disabled={!lastRecap}
+            >
+              {copied ? 'Copied!' : 'Copy to clipboard'}
+            </Button>
+          </div>
+
+          <div className="border-t border-border pt-3">
+            {lastRecap ? (
+              <p className="whitespace-pre-line text-sm leading-relaxed">
+                {lastRecap}
               </p>
             ) : (
-              <pre className="whitespace-pre-wrap text-sm mb-4">
-                {recapText}
-              </pre>
+              <p className="text-sm text-muted-foreground">
+                No recap generated yet. Click &quot;Schedule client recap&quot; to
+                create one from your recent Gmail threads.
+              </p>
             )}
-
-            <div className="flex justify-end gap-2">
-              {recapText && !recapError && (
-                <Button
-                  onClick={handleCopyRecap}
-                  className="text-sm px-3 py-2"
-                >
-                  Copy
-                </Button>
-              )}
-
-              <Button
-                onClick={handleGenerateRecap}
-                disabled={recapLoading}
-                className="text-sm px-3 py-2"
-              >
-                {recapLoading ? 'Regenerating…' : 'Regenerate'}
-              </Button>
-
-              <Button
-                onClick={() => setRecapOpen(false)}
-                className="text-sm px-3 py-2"
-              >
-                Close
-              </Button>
-            </div>
           </div>
-        </div>
-      )}
-    </>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
