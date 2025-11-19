@@ -1,62 +1,101 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../lib/authOptions";
+import { authOptions } from "../../../lib/authOptions";
 
+// GET /api/gmail/messages
 export async function GET() {
   const session = await getServerSession(authOptions);
-  const accessToken = (session as any)?.access_token;
+  const accessToken = (session as any)?.access_token as string | undefined;
 
+  // Not connected to Gmail
   if (!accessToken) {
     return NextResponse.json(
-      { error: "Not connected to Gmail" },
-      { status: 401 }
+      { connected: false, messages: [] },
+      { status: 200 }
     );
   }
 
   try {
-    // 1) Get list of recent messages (adjust maxResults as you like)
+    // 1) List a few recent INBOX messages (you can tweak the query later)
     const listRes = await fetch(
-      "https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=is:inbox",
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&labelIds=INBOX&q=newer_than:14d",
       {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       }
     );
 
-    const listJson = await listRes.json();
-
-    if (!listJson.messages?.length) {
-      return NextResponse.json({ messages: [] });
+    if (!listRes.ok) {
+      const text = await listRes.text().catch(() => "");
+      console.error("GMAIL LIST ERROR", listRes.status, text);
+      return NextResponse.json(
+        {
+          connected: true,
+          messages: [],
+          error: "Failed to list Gmail messages",
+        },
+        { status: 200 }
+      );
     }
 
-    // 2) Fetch details for each message
-    const details = await Promise.all(
-      listJson.messages.map(async (msg: any) => {
-        const res = await fetch(
-          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
-        );
-        return res.json();
-      })
+    const listJson = await listRes.json();
+    const ids: string[] = (listJson.messages ?? []).map((m: any) => m.id);
+
+    if (!ids.length) {
+      return NextResponse.json(
+        { connected: true, messages: [] },
+        { status: 200 }
+      );
+    }
+
+    // 2) Fetch details for each message (subject, from, date, snippet)
+    const details: any[] = [];
+
+    for (const id of ids) {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (!msgRes.ok) {
+        continue;
+      }
+
+      const msgJson = await msgRes.json();
+      const headers = msgJson.payload?.headers ?? [];
+
+      const findHeader = (name: string) =>
+        headers.find((h: any) => h.name === name)?.value ?? "";
+
+      details.push({
+        id,
+        subject: findHeader("Subject"),
+        from: findHeader("From"),
+        date: findHeader("Date"),
+        snippet: msgJson.snippet ?? "",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        connected: true,
+        messages: details,
+      },
+      { status: 200 }
     );
-
-    // 3) Normalize the data for the UI
-    const mapped = details.map((m: any) => {
-      const headers = m.payload?.headers || [];
-      const from = headers.find((h: any) => h.name === "From")?.value || "";
-      const subject =
-        headers.find((h: any) => h.name === "Subject")?.value || "";
-      const snippet = m.snippet || "";
-
-      return { from, subject, snippet };
-    });
-
-    return NextResponse.json({ messages: mapped });
-  } catch (err) {
+  } catch (err: any) {
     console.error("GMAIL MESSAGES ERROR", err);
     return NextResponse.json(
-      { error: "Failed to fetch Gmail messages" },
+      {
+        connected: false,
+        messages: [],
+        error: err?.message ?? "Unknown error",
+      },
       { status: 500 }
     );
   }
