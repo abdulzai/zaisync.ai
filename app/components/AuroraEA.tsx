@@ -5,133 +5,181 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 
+type GmailUnreadResponse = {
+  connected: boolean;
+  unread: number;
+};
+
+type GmailMessagesResponse = {
+  connected: boolean;
+  bullets: string[];
+  error?: string;
+};
+
+type RecapResponse = {
+  text?: string;
+  error?: string;
+};
+
 export default function AuroraEA() {
   const { data: session } = useSession();
 
-  const [connected, setConnected] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
   const [unread, setUnread] = useState<number | null>(null);
-  const [meetings] = useState<number>(0); // placeholder for Outlook phase
+
   const [loadingRecap, setLoadingRecap] = useState(false);
   const [lastRecap, setLastRecap] = useState<string | null>(null);
-  const [showRecapModal, setShowRecapModal] = useState(false);
 
-  // Load unread count + connection status
+  // --- Load Gmail unread + connection status on mount ---
   useEffect(() => {
     let ignore = false;
 
-    async function loadUnread() {
+    async function loadStatus() {
       try {
         const res = await fetch('/api/gmail/unread', { cache: 'no-store' });
-        const json = await res.json();
-        if (!ignore) {
-          setConnected(Boolean(json?.connected));
-          setUnread(typeof json?.unread === 'number' ? json.unread : 0);
-        }
+        if (!res.ok) return;
+
+        const json: GmailUnreadResponse = await res.json();
+        if (ignore) return;
+
+        setGmailConnected(Boolean(json.connected));
+        setUnread(typeof json.unread === 'number' ? json.unread : 0);
       } catch {
         if (!ignore) {
-          setConnected(false);
+          setGmailConnected(false);
           setUnread(0);
         }
       }
     }
 
-    loadUnread();
+    loadStatus();
+
+    // Restore last recap from localStorage (nice to have)
+    try {
+      const stored = window.localStorage.getItem('aurora-last-recap');
+      if (stored) setLastRecap(stored);
+    } catch {
+      // ignore
+    }
+
     return () => {
       ignore = true;
     };
   }, []);
 
-  async function handleScheduleRecap() {
+  // --- Handlers ---
+
+  const handleConnectGmail = () => {
+    // Simple redirect to NextAuth Google sign-in
+    window.location.href = '/api/auth/signin/google';
+  };
+
+  const handleScheduleRecap = async () => {
     setLoadingRecap(true);
     try {
       // 1) Get recent Gmail messages as bullets
       const msgRes = await fetch('/api/gmail/messages', { cache: 'no-store' });
-      const msgJson = await msgRes.json();
-
-      const bullets: string[] = Array.isArray(msgJson?.bullets)
-        ? msgJson.bullets
-        : [];
-
-      if (!msgJson.connected) {
-        alert('Gmail is not connected. Please reconnect from the dashboard.');
+      if (!msgRes.ok) {
+        const txt = await msgRes.text();
+        alert(`Error fetching Gmail messages: ${txt || msgRes.status}`);
         return;
       }
 
-      if (!bullets.length) {
+      const msgJson: GmailMessagesResponse = await msgRes.json();
+
+      if (!msgJson.connected) {
+        alert('Connect Gmail first, then try again.');
+        return;
+      }
+
+      if (!msgJson.bullets || msgJson.bullets.length === 0) {
         alert(
           'No recent Gmail messages found to build a recap. Try sending yourself a test email and then click again.'
         );
         return;
       }
 
-      // 2) Call AI recap endpoint with those bullets
+      // 2) Send bullets to AI recap endpoint
       const recapRes = await fetch('/api/ai/recap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bullets }),
+        body: JSON.stringify({ bullets: msgJson.bullets }),
       });
 
-      const recapJson = await recapRes.json();
+      const recapJson: RecapResponse = await recapRes.json();
 
-      if (!recapRes.ok || recapJson.error) {
-        alert('Error generating recap. Please try again.');
+      if (!recapRes.ok || !recapJson.text) {
+        alert(recapJson.error || 'Error generating recap. Please try again.');
         return;
       }
 
-      const text: string = recapJson.text ?? '';
-      setLastRecap(text);
-      setShowRecapModal(true);
-    } catch (err) {
-      console.error('Schedule recap error:', err);
-      alert('Unexpected error generating recap.');
+      setLastRecap(recapJson.text);
+
+      // Persist so it survives refresh
+      try {
+        window.localStorage.setItem('aurora-last-recap', recapJson.text);
+      } catch {
+        // ignore
+      }
+    } catch (err: any) {
+      alert(
+        `Error generating recap. ${
+          typeof err?.message === 'string' ? err.message : ''
+        }`
+      );
     } finally {
       setLoadingRecap(false);
     }
-  }
+  };
 
-  async function handleCopy() {
+  const handleCopyRecap = async () => {
     if (!lastRecap) return;
     try {
       await navigator.clipboard.writeText(lastRecap);
       alert('Recap copied to clipboard.');
     } catch {
-      alert('Unable to copy. Please select and copy manually.');
+      alert('Unable to copy to clipboard. You can still select + copy manually.');
     }
-  }
+  };
 
-  async function handleRegenerate() {
-    // Just reuse the main handler – it will refetch messages & regenerate
-    await handleScheduleRecap();
-  }
+  // --- Render ---
 
   return (
     <div className="space-y-8">
-      {/* Top cards */}
+      {/* Gmail card */}
       <Card>
         <CardContent className="p-6 flex items-center justify-between">
           <div>
             <div className="text-sm text-muted-foreground">Unread Emails</div>
             <div className="text-3xl font-bold mt-2">{unread ?? 0}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              {connected ? 'Gmail connected' : 'Connect Gmail'}
+              {gmailConnected ? 'Gmail connected' : 'Connect Gmail'}
             </div>
           </div>
+
+          {!gmailConnected && (
+            <Button className="mt-2" onClick={handleConnectGmail}>
+              Connect Gmail
+            </Button>
+          )}
         </CardContent>
       </Card>
 
+      {/* Outlook card (placeholder for next phase) */}
       <Card>
         <CardContent className="p-6 flex items-center justify-between">
           <div>
             <div className="text-sm text-muted-foreground">Meetings</div>
-            <div className="text-3xl font-bold mt-2">{meetings}</div>
+            <div className="text-3xl font-bold mt-2">0</div>
             <div className="text-xs text-muted-foreground mt-1">
               Next 24 hours
             </div>
           </div>
 
           <Button
-            // Outlook hook will go here in a next phase
-            onClick={() => alert('Outlook integration coming soon.')}
+            onClick={() =>
+              alert('Outlook integration will be wired up in the next phase.')
+            }
           >
             Connect Outlook
           </Button>
@@ -143,6 +191,7 @@ export default function AuroraEA() {
         <Button onClick={handleScheduleRecap} disabled={loadingRecap}>
           {loadingRecap ? 'Generating recap…' : 'Schedule client recap'}
         </Button>
+
         <Button
           onClick={() =>
             alert('Vendor update drafting will use the same pipeline next.')
@@ -152,52 +201,28 @@ export default function AuroraEA() {
         </Button>
       </div>
 
-      {/* Inline last recap card */}
-      {lastRecap && (
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <div className="text-sm font-semibold text-muted-foreground">
-              Last recap
-            </div>
-            <pre className="whitespace-pre-wrap text-sm font-sans">
-              {lastRecap}
-            </pre>
-            <div className="flex gap-2">
-              <Button onClick={handleCopy}>Copy</Button>
-              <Button onClick={handleRegenerate} disabled={loadingRecap}>
-                {loadingRecap ? 'Regenerating…' : 'Regenerate'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Last recap display */}
+      <Card>
+        <CardContent className="p-6 space-y-3">
+          <div className="text-sm font-medium text-muted-foreground">
+            Last recap
+          </div>
 
-      {/* Simple modal overlay using the same content, if you still have it in your layout.
-          If you decide you only want the inline card, you can remove this block. */}
-      {showRecapModal && lastRecap && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 p-6 space-y-4">
-            <h2 className="text-lg font-semibold">Client recap</h2>
-            <div className="max-h-[60vh] overflow-y-auto">
-              <pre className="whitespace-pre-wrap text-sm font-sans">
+          {lastRecap ? (
+            <>
+              <pre className="whitespace-pre-wrap text-sm leading-relaxed">
                 {lastRecap}
               </pre>
+              <Button onClick={handleCopyRecap}>Copy recap</Button>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              No recap generated yet. Click &ldquo;Schedule client recap&rdquo; to
+              create one from your recent Gmail threads.
             </div>
-            <div className="flex justify-end gap-2">
-              <Button onClick={handleCopy}>Copy</Button>
-              <Button onClick={handleRegenerate} disabled={loadingRecap}>
-                {loadingRecap ? 'Regenerating…' : 'Regenerate'}
-              </Button>
-              <Button
-                onClick={() => setShowRecapModal(false)}
-                // no variant to avoid the earlier type error
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
