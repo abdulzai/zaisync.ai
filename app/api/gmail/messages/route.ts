@@ -1,97 +1,80 @@
+// app/api/gmail/messages/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
+import { authOptions } from "../../../../lib/authOptions";
 
-// GET /api/gmail/messages
 export async function GET() {
+  const session = await getServerSession(authOptions);
+  const accessToken = (session as any)?.access_token as string | undefined;
+
+  if (!accessToken) {
+    return NextResponse.json(
+      { connected: false, bullets: [] },
+      { status: 200 },
+    );
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    const accessToken = (session as any)?.access_token as string | undefined;
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { connected: false, bullets: [], error: "No access token" },
-        { status: 200 }
-      );
-    }
-
-    // 1) Get a few recent inbox messages (last 7 days)
+    // 1) Get latest 5 inbox messages
     const listRes = await fetch(
-      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=is:inbox newer_than:7d",
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=in:inbox",
       {
         headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      },
     );
 
     if (!listRes.ok) {
-      const text = await listRes.text();
-      console.error("GMAIL LIST ERROR:", text);
-      return NextResponse.json(
-        { connected: true, bullets: [], error: "Failed to list messages" },
-        { status: 200 }
-      );
-    }
-
-    const listJson: any = await listRes.json();
-    const messages: { id: string }[] = listJson.messages ?? [];
-
-    if (!messages.length) {
+      console.error("GMAIL MESSAGES LIST ERROR", await listRes.text());
       return NextResponse.json(
         { connected: true, bullets: [] },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
-    // 2) Fetch details for each message
-    const details = await Promise.all(
-      messages.map(async (m) => {
-        const msgRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
-        );
+    const listJson = await listRes.json();
+    const messages = listJson.messages ?? [];
 
-        if (!msgRes.ok) return null;
+    const bullets: string[] = [];
 
-        const msgJson: any = await msgRes.json();
-        const headers: any[] = msgJson.payload?.headers ?? [];
-        const subject =
-          headers.find((h) => h.name === "Subject")?.value ?? "(no subject)";
-        const from =
-          headers.find((h) => h.name === "From")?.value ?? "Unknown sender";
-        const snippet: string = msgJson.snippet ?? "";
+    // 2) For each message, fetch lightweight metadata
+    for (const msg of messages) {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
 
-        return { subject, from, snippet };
-      })
+      if (!msgRes.ok) continue;
+
+      const msgJson = await msgRes.json();
+      const headers = msgJson.payload?.headers || [];
+
+      const getHeader = (name: string) =>
+        headers.find((h: any) => h.name === name)?.value || "";
+
+      const from = getHeader("From");
+      const subject = getHeader("Subject");
+      const date = getHeader("Date");
+
+      bullets.push(
+        `From: ${from} | Subject: ${subject} | Date: ${date}`,
+      );
+    }
+
+    return NextResponse.json(
+      { connected: true, bullets },
+      { status: 200 },
     );
-
-    const cleaned = details.filter(Boolean) as {
-      subject: string;
-      from: string;
-      snippet: string;
-    }[];
-
-    // 3) Turn them into recap bullets
-    const bullets = cleaned.map((m, i) => {
-      const shortSnippet =
-        m.snippet.length > 160 ? m.snippet.slice(0, 157) + "..." : m.snippet;
-
-      return `${i + 1}. Email from ${m.from} — "${m.subject}". Summary/snippet: ${shortSnippet}`;
-    });
-
+  } catch (err) {
+    console.error("GMAIL MESSAGES ERROR", err);
     return NextResponse.json(
       {
         connected: true,
-        bullets,
+        bullets: [],
+        error: "Failed to load Gmail messages",
       },
-      { status: 200 }
-    );
-  } catch (err: any) {
-    console.error("GMAIL MESSAGES ROUTE ERROR:", err?.message || err);
-    return NextResponse.json(
-      { connected: false, bullets: [], error: "Server error" },
-      { status: 200 }
+      { status: 200 },
     );
   }
 }
