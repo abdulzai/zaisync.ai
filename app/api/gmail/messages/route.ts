@@ -1,21 +1,12 @@
+// app/api/gmail/messages/route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
-
-type GmailMessageListResponse = {
-  messages?: { id: string }[];
-};
-
-type GmailMessage = {
-  id: string;
-  snippet: string;
-  payload?: {
-    headers?: { name: string; value: string }[];
-  };
-};
+// IMPORTANT: use relative path, NOT "@/lib/authOptions"
+import { authOptions } from "../../../lib/authOptions";
 
 export async function GET() {
-  // 1) Get access token from NextAuth session
+  // 1) Check session / Gmail connection
   const session = await getServerSession(authOptions);
   const accessToken = (session as any)?.access_token as string | undefined;
 
@@ -27,9 +18,9 @@ export async function GET() {
   }
 
   try {
-    // 2) List recent messages (last 7 days, no unread / inbox restriction)
+    // 2) Get the last 5 INBOX messages (no fancy filters for now)
     const listRes = await fetch(
-      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=newer_than:7d",
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&labelIds=INBOX",
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -39,62 +30,70 @@ export async function GET() {
     );
 
     if (!listRes.ok) {
-      console.error("Gmail list error:", await listRes.text());
+      const text = await listRes.text();
+      console.error("GMAIL LIST ERROR", listRes.status, text);
       return NextResponse.json(
         { connected: true, bullets: [] },
         { status: 200 }
       );
     }
 
-    const listJson = (await listRes.json()) as GmailMessageListResponse;
+    const listJson = await listRes.json();
+    const ids: string[] = (listJson.messages ?? []).map(
+      (m: any) => m.id as string
+    );
 
-    if (!listJson.messages || listJson.messages.length === 0) {
-      // No messages that match the query
+    if (!ids.length) {
+      // No messages found at all
       return NextResponse.json(
         { connected: true, bullets: [] },
         { status: 200 }
       );
     }
 
-    const firstFive = listJson.messages.slice(0, 5);
-
-    // 3) Fetch metadata for each message (Subject + From)
-    const details = await Promise.all(
-      firstFive.map(async (m) => {
-        const res = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+    // 3) Fetch basic metadata for each message
+    const messages = await Promise.all(
+      ids.map(async (id) => {
+        const msgRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
           {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
+            headers: { Authorization: `Bearer ${accessToken}` },
             cache: "no-store",
           }
         );
 
-        if (!res.ok) {
-          console.error("Gmail message error:", m.id, await res.text());
+        if (!msgRes.ok) {
+          const txt = await msgRes.text();
+          console.error("GMAIL MESSAGE ERROR", id, msgRes.status, txt);
           return null;
         }
 
-        return (await res.json()) as GmailMessage;
+        return msgRes.json();
       })
     );
 
-    // 4) Turn messages into simple bullets
-    const bullets = details
-      .filter((m): m is GmailMessage => !!m)
-      .map((m) => {
-        const headers = m.payload?.headers ?? [];
-        const subject =
-          headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-        const from = headers.find((h) => h.name === "From")?.value || "";
+    const bullets = messages
+      .filter(Boolean)
+      .map((msg: any) => {
+        const headersArray = msg?.payload?.headers ?? [];
+        const headers: Record<string, string> = {};
+        for (const h of headersArray) {
+          headers[h.name] = h.value;
+        }
 
-        return from ? `${subject} — ${from}` : subject;
+        const subject = headers["Subject"] ?? "(no subject)";
+        const from = headers["From"] ?? "(unknown sender)";
+        const date = headers["Date"] ?? "";
+
+        return `${subject} — from ${from}${date ? ` on ${date}` : ""}`;
       });
 
-    return NextResponse.json({ connected: true, bullets }, { status: 200 });
+    return NextResponse.json(
+      { connected: true, bullets },
+      { status: 200 }
+    );
   } catch (err) {
-    console.error("Gmail messages route error:", err);
+    console.error("GMAIL MESSAGES ROUTE ERROR", err);
     return NextResponse.json(
       { connected: true, bullets: [] },
       { status: 200 }
