@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../lib/authOptions"; // <- use SAME path as summary route
+import { authOptions } from "@/lib/authOptions";
 
 export async function GET() {
   // 1) Check session / Gmail connection
@@ -10,21 +10,21 @@ export async function GET() {
   const accessToken = (session as any)?.access_token as string | undefined;
 
   if (!accessToken) {
+    // Not connected to Google at all
     return NextResponse.json(
       {
         connected: false,
         bullets: [],
-        debug: "no_access_token",
+        debug: { where: "no_access_token" },
       },
       { status: 200 }
     );
   }
 
   try {
-    // 2) Call Gmail list API in the most basic way possible
-    //    No query, no labelIds – just "give me the last 5 messages"
+    // 2) List recent messages (last 2 days, inbox)
     const listRes = await fetch(
-      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5",
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=newer_than:2d label:inbox",
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -32,75 +32,79 @@ export async function GET() {
       }
     );
 
+    const listText = await listRes.text();
+
     if (!listRes.ok) {
-      const body = await listRes.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(listText);
+      } catch {
+        parsed = listText;
+      }
+
       return NextResponse.json(
         {
           connected: true,
           bullets: [],
-          debug: "list_failed",
-          debugStatus: listRes.status,
-          debugBody: body,
+          debug: {
+            where: "list_failed",
+            status: listRes.status,
+            error: parsed,
+          },
         },
         { status: 200 }
       );
     }
 
-    const listJson: any = await listRes.json();
-    const ids: string[] = (listJson.messages || []).map((m: any) => m.id);
+    const listJson = JSON.parse(listText) as { messages?: { id: string }[] };
 
-    if (!ids.length) {
+    const ids = listJson.messages?.map((m) => m.id) ?? [];
+    if (ids.length === 0) {
       return NextResponse.json(
         {
           connected: true,
           bullets: [],
-          debug: "no_messages",
+          debug: { where: "list_ok_but_empty", status: listRes.status },
         },
         { status: 200 }
       );
     }
 
-    // 3) Fetch basic metadata for each message and turn into bullets
-    const messages = await Promise.all(
-      ids.map(async (id) => {
-        const msgRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          }
-        );
+    // 3) Fetch basic metadata for each message
+    const bullets: string[] = [];
 
-        if (!msgRes.ok) {
-          return null;
+    for (const id of ids) {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         }
-
-        const msgJson: any = await msgRes.json();
-        const headers = msgJson.payload?.headers || [];
-
-        const subject =
-          headers.find((h: any) => h.name === "Subject")?.value ||
-          "(no subject)";
-        const from =
-          headers.find((h: any) => h.name === "From")?.value || "(unknown)";
-
-        return { subject, from };
-      })
-    );
-
-    const bullets = messages
-      .filter(Boolean)
-      .map(
-        (m) =>
-          `Email from ${m!.from} about "${m!.subject}".`
       );
+
+      const msgText = await msgRes.text();
+      if (!msgRes.ok) {
+        // Skip any single bad message
+        continue;
+      }
+
+      const msg = JSON.parse(msgText) as any;
+      const headers: { name: string; value: string }[] =
+        msg.payload?.headers ?? [];
+
+      const subject =
+        headers.find((h) => h.name === "Subject")?.value || "(no subject)";
+      const from = headers.find((h) => h.name === "From")?.value || "";
+
+      bullets.push(`${subject}${from ? ` — ${from}` : ""}`);
+    }
 
     return NextResponse.json(
       {
         connected: true,
         bullets,
-        debug: "ok",
+        debug: { where: "success", count: bullets.length },
       },
       { status: 200 }
     );
@@ -109,8 +113,10 @@ export async function GET() {
       {
         connected: true,
         bullets: [],
-        debug: "exception",
-        debugMessage: err?.message ?? String(err),
+        debug: {
+          where: "exception",
+          message: err?.message ?? String(err),
+        },
       },
       { status: 200 }
     );
