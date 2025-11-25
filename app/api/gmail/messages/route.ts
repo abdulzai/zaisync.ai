@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
+import { authOptions } from "../../../../lib/authOptions";  // ← fixed path
 
 export async function GET() {
   // 1) Check session / Gmail connection
@@ -112,11 +112,11 @@ export async function GET() {
     return NextResponse.json(
       {
         connected: true,
-        bullets: [],
-        debug: {
-          where: "exception",
-          message: err?.message ?? String(err),
-        },
+          bullets: [],
+          debug: {
+            where: "exception",
+            message: err?.message ?? String(err),
+          },
       },
       { status: 200 }
     );
