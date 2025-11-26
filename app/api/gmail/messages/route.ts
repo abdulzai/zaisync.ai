@@ -5,26 +5,25 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 
 type GmailListResponse = {
-  messages?: { id: string }[];
+  messages?: { id: string; threadId: string }[];
 };
 
 type GmailMessage = {
-  id: string;
-  snippet?: string;
   payload?: {
     headers?: { name: string; value: string }[];
   };
 };
 
-// Map client keys -> Gmail search queries
-// You can add more later: "desri", "apex", etc.
-const CLIENT_QUERIES: Record<string, string> = {
-  // Intersect Power example:
-  // - any mail from @intersectpower.com
-  // - OR subject that mentions "Intersect Power"
-  intersectpower:
-    '(from:@intersectpower.com OR subject:"Intersect Power" OR subject:Intersect)',
-};
+function getHeader(
+  headers: { name: string; value: string }[] | undefined,
+  name: string
+): string | undefined {
+  if (!headers) return undefined;
+  const found = headers.find(
+    (h) => h.name.toLowerCase() === name.toLowerCase()
+  );
+  return found?.value;
+}
 
 export async function GET(req: Request) {
   // 1) Check session / Gmail connection
@@ -38,39 +37,27 @@ export async function GET(req: Request) {
         bullets: [],
         debug: { where: "no_access_token" },
       },
-      { status: 200 },
+      { status: 200 }
     );
-  }
-
-  // 2) Figure out which client we’re targeting (optional)
-  const url = new URL(req.url);
-  const clientKey = url.searchParams.get("client") ?? undefined;
-
-  // Base query = last 7 days
-  let gmailQuery = "newer_than:7d";
-
-  if (clientKey && CLIENT_QUERIES[clientKey]) {
-    gmailQuery = `${gmailQuery} ${CLIENT_QUERIES[clientKey]}`;
   }
 
   try {
-    // 3) List recent messages (max 5) with our query
-    const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=${encodeURIComponent(
-        gmailQuery,
-      )}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    // 2) List recent messages from PRIMARY inbox, last 24 hours
+    // Gmail query docs: https://support.google.com/mail/answer/7190?hl=en
+    const listUrl = new URL(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages"
     );
+    listUrl.searchParams.set("maxResults", "10");
+    listUrl.searchParams.set("q", "newer_than:1d in:inbox category:primary");
 
-    const listJson = (await listRes.json()) as GmailListResponse & {
-      error?: any;
-    };
+    const listRes = await fetch(listUrl.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
-    if (!listRes.ok || listJson.error) {
+    if (!listRes.ok) {
+      const errorBody = await listRes.json().catch(() => null);
       return NextResponse.json(
         {
           connected: true,
@@ -78,74 +65,57 @@ export async function GET(req: Request) {
           debug: {
             where: "list_failed",
             status: listRes.status,
-            error: listJson.error ?? null,
+            error: errorBody,
           },
         },
-        { status: 200 },
+        { status: 200 }
       );
     }
 
-    const messages = listJson.messages ?? [];
+    const listData = (await listRes.json()) as GmailListResponse;
+    const messageIds = listData.messages?.map((m) => m.id) ?? [];
+    const topIds = messageIds.slice(0, 5);
 
-    if (messages.length === 0) {
-      return NextResponse.json(
-        {
-          connected: true,
-          bullets: [],
-          debug: { where: "no_messages", query: gmailQuery },
-        },
-        { status: 200 },
-      );
-    }
-
-    // 4) Fetch each message detail and turn into simple bullets
+    // 3) Fetch details for each message & turn into bullets
     const bullets: string[] = [];
 
-    for (const msg of messages) {
+    for (const id of topIds) {
       const msgRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
-        },
+        }
       );
 
-      const msgJson = (await msgRes.json()) as GmailMessage;
+      if (!msgRes.ok) continue;
 
-      const headers = msgJson.payload?.headers ?? [];
-      const subject =
-        headers.find((h) => h.name.toLowerCase() === "subject")?.value ??
-        "(no subject)";
-      const from =
-        headers.find((h) => h.name.toLowerCase() === "from")?.value ??
-        "(unknown sender)";
+      const msgData = (await msgRes.json()) as GmailMessage;
+      const headers = msgData.payload?.headers ?? [];
 
-      bullets.push(`${subject} — ${from}`);
+      const from = getHeader(headers, "From") ?? "Unknown sender";
+      const subject = getHeader(headers, "Subject") ?? "(no subject)";
+
+      bullets.push(`${from} — ${subject}`);
     }
 
     return NextResponse.json(
       {
         connected: true,
         bullets,
-        debug: {
-          where: "success",
-          count: bullets.length,
-          query: gmailQuery,
-          client: clientKey ?? null,
-        },
+        debug: { where: "success", count: bullets.length },
       },
-      { status: 200 },
+      { status: 200 }
     );
   } catch (err: any) {
-    console.error("GMAIL MESSAGES ERROR", err);
     return NextResponse.json(
       {
         connected: true,
         bullets: [],
-        debug: { where: "exception", message: err?.message ?? String(err) },
+        debug: { where: "catch", error: err?.message ?? "unknown_error" },
       },
-      { status: 200 },
+      { status: 200 }
     );
   }
 }
