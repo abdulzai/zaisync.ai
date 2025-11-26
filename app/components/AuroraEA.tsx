@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+
+// NOTE: use RELATIVE imports so we don’t depend on the @ alias here
+import { Card, CardContent } from "./ui/card";
+import { Button } from "./ui/button";
 
 export default function AuroraEA() {
   // Gmail / meetings basic stats
@@ -191,7 +193,7 @@ export default function AuroraEA() {
             : "No recap generated yet. Click “Schedule client recap” to create one from your recent Gmail threads."}
         </div>
 
-        {lastBullets.length > 0 && (
+      {lastBullets.length > 0 && (
           <div className="mt-3">
             <div className="text-xs font-semibold text-muted-foreground mb-1">
               Source bullets (from Gmail)
