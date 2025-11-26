@@ -6,7 +6,9 @@ import { authOptions } from "@/lib/authOptions";
 
 // FILTER SETTINGS — adjust anytime
 const HOURS_LOOKBACK = 24; // last 24 hours
-const BLOCK_SENDERS = [
+
+// Explicit string[] types to keep TypeScript happy
+const BLOCK_SENDERS: string[] = [
   "express.com",
   "hulmail.com",
   "newsletters",
@@ -15,9 +17,9 @@ const BLOCK_SENDERS = [
   "noreply",
 ];
 
-const CLIENT_KEYWORDS = [
-  // Add your client domains or keywords here
-  // "intersectpower.com",
+// Example client keywords (you can add more)
+const CLIENT_KEYWORDS: string[] = [
+  "intersectpower.com",
   // "desri",
   // "radian",
 ];
