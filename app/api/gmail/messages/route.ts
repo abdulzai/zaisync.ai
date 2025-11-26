@@ -4,8 +4,26 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 
+// FILTER SETTINGS — adjust anytime
+const HOURS_LOOKBACK = 24; // last 24 hours
+const BLOCK_SENDERS = [
+  "express.com",
+  "hulmail.com",
+  "newsletters",
+  "promo",
+  "marketing",
+  "noreply",
+];
+
+const CLIENT_KEYWORDS = [
+  // Add your client domains or keywords here
+  // "intersectpower.com",
+  // "desri",
+  // "radian",
+];
+
 export async function GET() {
-  // 1) Check session / Gmail connection
+  // 1) Validate Gmail session + token
   const session = await getServerSession(authOptions);
   const accessToken = (session as any)?.access_token as string | undefined;
 
@@ -14,65 +32,73 @@ export async function GET() {
       {
         connected: false,
         bullets: [],
-        debug: { where: "no_access_token" }
+        debug: { where: "no_access_token" },
       },
       { status: 200 }
     );
   }
 
   try {
-    // 2) List recent messages (last 5 in inbox)
+    // 2) Build Gmail query
+    const since = new Date(Date.now() - HOURS_LOOKBACK * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    let query = `newer_than:${HOURS_LOOKBACK}h`;
+
+    // Optional: add client keyword filters
+    if (CLIENT_KEYWORDS.length > 0) {
+      query += ` (${CLIENT_KEYWORDS.join(" OR ")})`;
+    }
+
+    // 3) Fetch Gmail messages
     const listRes = await fetch(
-      "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=in:inbox",
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+        query
+      )}&maxResults=10`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
+          Authorization: `Bearer ${accessToken}`,
+        },
       }
     );
 
-    if (!listRes.ok) {
-      const errorJson = await listRes.json().catch(() => undefined);
+    const listJson = await listRes.json();
+
+    if (!listJson.messages) {
       return NextResponse.json(
         {
           connected: true,
           bullets: [],
-          debug: {
-            where: "list_failed",
-            status: listRes.status,
-            error: errorJson
-          }
+          debug: { where: "empty", raw: listJson },
         },
         { status: 200 }
       );
     }
 
-    const listJson = await listRes.json();
-    const messages = listJson.messages ?? [];
-
+    // 4) Fetch each message details + extract subject
     const bullets: string[] = [];
 
-    // 3) For each message, pull simple summary (Subject + From)
-    for (const msg of messages) {
+    for (const msg of listJson.messages.slice(0, 5)) {
       const msgRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=subject&metadataHeaders=from`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
         {
-          headers: {
-            Authorization: `Bearer ${accessToken}`
-          }
+          headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
 
-      if (!msgRes.ok) continue;
-
       const msgJson = await msgRes.json();
-      const headers: any[] = msgJson.payload?.headers ?? [];
+      const headers = msgJson.payload?.headers || [];
 
-      const subjectHeader = headers.find((h) => h.name === "Subject");
-      const fromHeader = headers.find((h) => h.name === "From");
+      const subject = headers.find((h: any) => h.name === "Subject")?.value;
+      const from = headers.find((h: any) => h.name === "From")?.value || "";
 
-      const subject = subjectHeader?.value ?? "(no subject)";
-      const from = fromHeader?.value ?? "(unknown sender)";
+      if (!subject) continue;
+
+      // 🎯 FILTER: Skip promo senders
+      if (BLOCK_SENDERS.some((item) => from.toLowerCase().includes(item))) {
+        continue;
+      }
 
       bullets.push(`${subject} — ${from}`);
     }
@@ -81,7 +107,10 @@ export async function GET() {
       {
         connected: true,
         bullets,
-        debug: { where: "success", count: bullets.length }
+        debug: {
+          where: "success",
+          count: bullets.length,
+        },
       },
       { status: 200 }
     );
@@ -90,7 +119,7 @@ export async function GET() {
       {
         connected: true,
         bullets: [],
-        debug: { where: "exception", message: err?.message ?? String(err) }
+        debug: { where: "list_failed", error: err.message },
       },
       { status: 200 }
     );
