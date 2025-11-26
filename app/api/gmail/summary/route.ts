@@ -1,58 +1,17 @@
 // app/api/gmail/summary/route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../lib/authOptions";
+import { authOptions } from "@/lib/authOptions";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   const accessToken = (session as any)?.access_token as string | undefined;
 
-  // Not signed in with Google
-  if (!accessToken) {
-    return NextResponse.json(
-      { connected: false, hasMail: false },
-      { status: 200 }
-    );
-  }
-
-  // Get the most recent message in the INBOX
-  const listRes = await fetch(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=1&q=is:inbox",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  const listJson = await listRes.json();
-  const first = listJson.messages?.[0];
-
-  // No mail in inbox
-  if (!first) {
-    return NextResponse.json(
-      { connected: true, hasMail: false },
-      { status: 200 }
-    );
-  }
-
-  // Fetch that message to get the snippet
-  const msgRes = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${first.id}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  const msgJson = await msgRes.json();
-
   return NextResponse.json(
     {
-      connected: true,
-      hasMail: true,
-      snippet: msgJson.snippet ?? "",
+      connected: !!session,
+      hasMail: !!accessToken
     },
     { status: 200 }
   );
