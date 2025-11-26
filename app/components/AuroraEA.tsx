@@ -77,7 +77,7 @@ export default function AuroraEA() {
     setCopyLabel("Copy");
 
     try {
-      const res = await fetch("/api/gmail/messages");
+      const res = await fetch("/api/gmail/messages?client=intersectpower");
       if (!res.ok) {
         console.error("Error from /api/gmail/messages:", await res.text());
         alert("Error fetching Gmail messages. Please try again.");
