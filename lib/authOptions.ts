@@ -10,21 +10,27 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          // IMPORTANT: Gmail read-only scope
+          scope:
+            "openid email profile https://www.googleapis.com/auth/gmail.readonly",
           access_type: "offline",
-          prompt: "consent",
-        },
-      },
-    }),
+          prompt: "consent"
+        }
+      }
+    })
   ],
   callbacks: {
     async jwt({ token, account }) {
-      if (account) token.access_token = account.access_token;
+      // When we first sign in, persist the access_token on the JWT
+      if (account) {
+        (token as any).access_token = account.access_token;
+      }
       return token;
     },
     async session({ session, token }) {
-      (session as any).access_token = token.access_token;
+      // Expose access_token on the session so API routes can use it
+      (session as any).access_token = (token as any).access_token;
       return session;
-    },
-  },
+    }
+  }
 };
