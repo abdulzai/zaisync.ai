@@ -18,6 +18,8 @@ export default function AuroraEA() {
   const [lastRecap, setLastRecap] = useState<string | null>(null);
   const [lastBullets, setLastBullets] = useState<string[]>([]);
   const [copyLabel, setCopyLabel] = useState<string>("Copy");
+  const [loadingVendor, setLoadingVendor] = useState(false);
+  const [vendorDraft, setVendorDraft] = useState<string | null>(null);
 
   // Load unread count + connection status on mount
   useEffect(() => {
@@ -70,6 +72,51 @@ export default function AuroraEA() {
       setLoadingRecap(false);
     }
   };
+
+  const handleVendorUpdate = async () => {
+  try {
+    setLoadingVendor(true);
+
+    let bullets = lastBullets;
+
+    // If we don't already have bullets from a recap, fetch them now
+    if (!bullets || bullets.length === 0) {
+      const emailsRes = await fetch("/api/gmail/messages");
+      const emailsData = await emailsRes.json();
+
+      if (!emailsData.connected || !emailsData.bullets?.length) {
+        alert(
+          "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
+        );
+        return;
+      }
+
+      bullets = emailsData.bullets;
+      setLastBullets(emailsData.bullets);
+    }
+
+    const res = await fetch("/api/ai/vendor-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bullets }),
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      console.error("Vendor update error:", errJson);
+      alert("Could not generate vendor update. Please try again.");
+      return;
+    }
+
+    const json = await res.json();
+    setVendorDraft(json.vendorUpdate || "");
+  } catch (err) {
+    console.error(err);
+    alert("Something went wrong generating the vendor update.");
+  } finally {
+    setLoadingVendor(false);
+  }
+};
 
   // Step 1: Fetch recent Gmail messages -> bullets
   const handleScheduleRecap = async () => {
