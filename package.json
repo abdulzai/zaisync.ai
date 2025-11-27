@@ -15,8 +15,6 @@
     "react-dom": "18.2.0",
     "next-auth": "4.24.8"
     "dependencies": {
-  // ...whatever you already have here,
-
   "@ai-sdk/openai": "^1.0.0",
   "ai": "^3.3.0"
 }
