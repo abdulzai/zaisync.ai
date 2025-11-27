@@ -1,42 +1,66 @@
-// app/api/ai/vendor-update/route.ts
-
 import { NextResponse } from "next/server";
-import { openai } from "@ai-sdk/openai";
-import { generateText } from "ai";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const bullets = (body?.bullets as string[]) || [];
+    const { bullets } = await req.json();
 
-    if (!bullets.length) {
+    if (!bullets || !Array.isArray(bullets) || bullets.length === 0) {
       return NextResponse.json(
         { error: "No bullets provided" },
         { status: 400 }
       );
     }
 
-    // Turn the bullets into a single prompt string
-    const bulletList = bullets.map((b, i) => `${i + 1}. ${b}`).join("\n");
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "OPENAI_API_KEY is not set" },
+        { status: 500 }
+      );
+    }
 
-    const { text } = await generateText({
-      model: openai("gpt-4.1-mini"),
-      system:
-        "You are an operations and vendor-management leader. " +
-        "Given recent email updates (as bullets), write a concise, professional vendor update email. " +
-        "The tone should be clear, calm, and executive-friendly. " +
-        "Include numbered points or short paragraphs, and end with a clear call to action or next steps.",
-      prompt:
-        "Here are the recent updates as bullets:\n\n" +
-        bulletList +
-        "\n\nDraft a vendor update email I can send to a key third-party partner.",
+    const prompt =
+      `You are an operations and vendor-management leader.\n` +
+      `Given recent email updates (as bullets), write a concise, professional vendor update email.\n` +
+      `Tone: confident, clear, no fluff. 3–6 short paragraphs max.\n\n` +
+      `Email bullets:\n` +
+      bullets.map((b: string, i: number) => `${i + 1}. ${b}`).join("\n");
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You write vendor-facing status emails." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.4,
+      }),
     });
 
-    return NextResponse.json({ vendorUpdate: text });
-  } catch (err) {
-    console.error("Vendor-update route error:", err);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenAI vendor-update error:", errorText);
+      return NextResponse.json(
+        { error: "OpenAI API error", details: errorText },
+        { status: 500 }
+      );
+    }
+
+    const data = await response.json();
+    const vendorUpdate =
+      data.choices?.[0]?.message?.content ||
+      "No vendor update was generated. Try again with more detail in the bullets.";
+
+    return NextResponse.json({ vendorUpdate });
+  } catch (err: any) {
+    console.error("Vendor update route error:", err);
     return NextResponse.json(
-      { error: "Failed to generate vendor update" },
+      { error: err?.message || "Unknown error" },
       { status: 500 }
     );
   }
