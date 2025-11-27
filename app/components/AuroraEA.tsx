@@ -18,6 +18,8 @@ export default function AuroraEA() {
   const [lastRecap, setLastRecap] = useState<string | null>(null);
   const [lastBullets, setLastBullets] = useState<string[]>([]);
   const [copyLabel, setCopyLabel] = useState<string>("Copy");
+
+  // Vendor-update state
   const [loadingVendor, setLoadingVendor] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<string | null>(null);
 
@@ -73,50 +75,54 @@ export default function AuroraEA() {
     }
   };
 
+  // --- Vendor update pipeline ---------------------------------------------
+
   const handleVendorUpdate = async () => {
-  try {
-    setLoadingVendor(true);
+    try {
+      setLoadingVendor(true);
 
-    let bullets = lastBullets;
+      let bullets = lastBullets;
 
-    // If we don't already have bullets from a recap, fetch them now
-    if (!bullets || bullets.length === 0) {
-      const emailsRes = await fetch("/api/gmail/messages");
-      const emailsData = await emailsRes.json();
+      // If we don't already have bullets from a recap, fetch them now
+      if (!bullets || bullets.length === 0) {
+        const emailsRes = await fetch("/api/gmail/messages");
+        const emailsData = await emailsRes.json();
 
-      if (!emailsData.connected || !emailsData.bullets?.length) {
-        alert(
-          "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
-        );
+        if (!emailsData.connected || !emailsData.bullets?.length) {
+          alert(
+            "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
+          );
+          return;
+        }
+
+        bullets = emailsData.bullets;
+        setLastBullets(emailsData.bullets);
+      }
+
+      const res = await fetch("/api/ai/vendor-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bullets }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.error("Vendor update error:", errJson);
+        alert("Could not generate vendor update. Please try again.");
         return;
       }
 
-      bullets = emailsData.bullets;
-      setLastBullets(emailsData.bullets);
+      const json = await res.json();
+      setVendorDraft(json.vendorUpdate || "");
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong generating the vendor update.");
+    } finally {
+      setLoadingVendor(false);
     }
+  };
 
-    const res = await fetch("/api/ai/vendor-update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bullets }),
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      console.error("Vendor update error:", errJson);
-      alert("Could not generate vendor update. Please try again.");
-      return;
-    }
-
-    const json = await res.json();
-    setVendorDraft(json.vendorUpdate || "");
-  } catch (err) {
-    console.error(err);
-    alert("Something went wrong generating the vendor update.");
-  } finally {
-    setLoadingVendor(false);
-  }
-};
+  // --- Recap entry point ---------------------------------------------------
 
   // Step 1: Fetch recent Gmail messages -> bullets
   const handleScheduleRecap = async () => {
@@ -124,7 +130,8 @@ export default function AuroraEA() {
     setCopyLabel("Copy");
 
     try {
-      const res = await fetch("/api/gmail/messages?client=intersectpower");
+      // Use last 24 hours from primary inbox (handled in the API)
+      const res = await fetch("/api/gmail/messages");
       if (!res.ok) {
         console.error("Error from /api/gmail/messages:", await res.text());
         alert("Error fetching Gmail messages. Please try again.");
@@ -221,13 +228,8 @@ export default function AuroraEA() {
           {loadingRecap ? "Generating recap…" : "Schedule client recap"}
         </Button>
 
-        <Button
-          variant="outline"
-          onClick={() =>
-            alert("Vendor update drafting will use the same pipeline next.")
-          }
-        >
-          Draft vendor update
+        <Button onClick={handleVendorUpdate} disabled={loadingVendor}>
+          {loadingVendor ? "Drafting vendor update…" : "Draft vendor update"}
         </Button>
       </div>
 
@@ -240,7 +242,7 @@ export default function AuroraEA() {
             : "No recap generated yet. Click “Schedule client recap” to create one from your recent Gmail threads."}
         </div>
 
-      {lastBullets.length > 0 && (
+        {lastBullets.length > 0 && (
           <div className="mt-3">
             <div className="text-xs font-semibold text-muted-foreground mb-1">
               Source bullets (from Gmail)
@@ -253,6 +255,20 @@ export default function AuroraEA() {
           </div>
         )}
       </div>
+
+      {/* Vendor update draft section */}
+      {vendorDraft && (
+        <div className="mt-4 border rounded-lg p-4 bg-muted/40">
+          <div className="text-sm font-semibold mb-2">Vendor update draft</div>
+          <div className="text-sm whitespace-pre-line">{vendorDraft}</div>
+          <Button
+            className="mt-3"
+            onClick={() => navigator.clipboard.writeText(vendorDraft)}
+          >
+            Copy vendor update
+          </Button>
+        </div>
+      )}
 
       {/* Simple modal for recap preview */}
       {recapModalOpen && (
@@ -271,10 +287,7 @@ export default function AuroraEA() {
               <Button onClick={handleRegenerateRecap} disabled={loadingRecap}>
                 {loadingRecap ? "Generating…" : "Regenerate"}
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setRecapModalOpen(false)}
-              >
+              <Button variant="ghost" onClick={() => setRecapModalOpen(false)}>
                 Close
               </Button>
             </div>
