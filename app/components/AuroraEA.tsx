@@ -201,9 +201,8 @@ export default function AuroraEA() {
       </div>
     </div>
 
-    {!gmailConnected && (
+        {!gmailConnected && (
       <Button
-        size="sm"
         onClick={() => {
           // Kick off NextAuth Google sign-in
           window.location.href = "/api/auth/signin/google";
