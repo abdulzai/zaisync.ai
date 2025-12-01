@@ -191,16 +191,29 @@ export default function AuroraEA() {
       <div className="grid gap-4 md:grid-cols-2">
         {/* Gmail / unread */}
         <Card>
+ 
           <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <div className="text-sm text-muted-foreground">Unread Emails</div>
-              <div className="text-3xl font-bold mt-2">{unread}</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {gmailConnected ? "Gmail connected" : "Connect Gmail"}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+    <div>
+      <div className="text-sm text-muted-foreground">Unread Emails</div>
+      <div className="text-3xl font-bold mt-2">{unread}</div>
+      <div className="text-xs text-muted-foreground mt-1">
+        {gmailConnected ? "Gmail connected" : "Gmail not connected"}
+      </div>
+    </div>
+
+    {!gmailConnected && (
+      <Button
+        size="sm"
+        onClick={() => {
+          // Kick off NextAuth Google sign-in
+          window.location.href = "/api/auth/signin/google";
+        }}
+      >
+        Connect Gmail
+      </Button>
+    )}
+  </CardContent>
+</Card>
 
         {/* Meetings placeholder */}
         <Card>
