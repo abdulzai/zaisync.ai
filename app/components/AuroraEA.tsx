@@ -1,11 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-
-// NOTE: use RELATIVE imports so we don’t depend on the @ alias here
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
-import VendorModal from "./VendorModal";
 
 export default function AuroraEA() {
   // Gmail / meetings basic stats
@@ -22,7 +19,6 @@ export default function AuroraEA() {
 
   // Vendor update state
   const [loadingVendor, setLoadingVendor] = useState<boolean>(false);
-  const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
   const [vendorDraft, setVendorDraft] = useState<string | null>(null);
 
   // Load unread count + connection status on mount
@@ -47,7 +43,6 @@ export default function AuroraEA() {
 
   // --- Recap pipeline helpers ---------------------------------------------
 
-  // Call AI API to generate recap text from bullets
   const generateRecapFromBullets = async (bullets: string[]) => {
     if (!bullets || bullets.length === 0) return;
 
@@ -83,7 +78,7 @@ export default function AuroraEA() {
     setCopyLabel("Copy");
 
     try {
-      // NOTE: no client param — use last 24h from primary inbox
+      // currently using last 24h inbox in /api/gmail/messages – no client filter here
       const res = await fetch("/api/gmail/messages");
       if (!res.ok) {
         console.error("Error from /api/gmail/messages:", await res.text());
@@ -135,11 +130,34 @@ export default function AuroraEA() {
     await generateRecapFromBullets(lastBullets);
   };
 
-  // --- Vendor Update pipeline ---------------------------------------------
-
-  const runVendorUpdate = async (bullets: string[]) => {
-    setLoadingVendor(true);
+  const handleVendorUpdate = async () => {
     try {
+      setLoadingVendor(true);
+
+      let bullets = lastBullets;
+
+      // If we don't already have bullets from a recap, fetch them now
+      if (!bullets || bullets.length === 0) {
+        const emailsRes = await fetch("/api/gmail/messages");
+        if (!emailsRes.ok) {
+          console.error("Error from /api/gmail/messages:", await emailsRes.text());
+          alert("Error fetching Gmail messages. Please try again.");
+          return;
+        }
+
+        const emailsData = await emailsRes.json();
+
+        if (!emailsData.connected || !emailsData.bullets?.length) {
+          alert(
+            "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
+          );
+          return;
+        }
+
+        bullets = emailsData.bullets;
+        setLastBullets(emailsData.bullets);
+      }
+
       const res = await fetch("/api/ai/vendor-update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -154,83 +172,15 @@ export default function AuroraEA() {
       }
 
       const json = await res.json();
-      setVendorDraft(json.vendorUpdate || "No vendor update generated.");
+      setVendorDraft(json.vendorUpdate || "");
+      setRecapModalOpen(true);
+      setLastRecap(json.vendorUpdate || "");
     } catch (err) {
-      console.error("Vendor update error:", err);
+      console.error(err);
       alert("Something went wrong generating the vendor update.");
     } finally {
       setLoadingVendor(false);
     }
-  };
-
-  const handleVendorUpdate = async () => {
-    setVendorModalOpen(true);
-    setVendorDraft(null); // clear previous content
-    setLoadingVendor(true);
-
-    try {
-      let bullets = lastBullets;
-
-      // If we don't already have bullets from a recap, fetch them now
-      if (!bullets || bullets.length === 0) {
-        const emailsRes = await fetch("/api/gmail/messages");
-        if (!emailsRes.ok) {
-          console.error(
-            "Error from /api/gmail/messages (vendor):",
-            await emailsRes.text()
-          );
-          alert("Error fetching Gmail messages. Please try again.");
-          setVendorModalOpen(false);
-          return;
-        }
-
-        const emailsData = await emailsRes.json();
-
-        if (!emailsData.connected) {
-          alert("Please connect Gmail first, then try again.");
-          setVendorModalOpen(false);
-          return;
-        }
-
-        if (!emailsData.bullets || emailsData.bullets.length === 0) {
-          alert(
-            "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
-          );
-          setVendorModalOpen(false);
-          return;
-        }
-
-        bullets = emailsData.bullets;
-        setLastBullets(emailsData.bullets);
-      }
-
-      await runVendorUpdate(bullets);
-    } catch (err) {
-      console.error("Vendor update pipeline error:", err);
-      alert("Something went wrong generating the vendor update.");
-      setVendorModalOpen(false);
-    } finally {
-      setLoadingVendor(false);
-    }
-  };
-
-  const handleVendorCopy = async () => {
-    if (!vendorDraft) return;
-    try {
-      await navigator.clipboard.writeText(vendorDraft);
-      alert("Vendor update copied to clipboard.");
-    } catch (err) {
-      console.error("Clipboard error (vendor):", err);
-      alert("Could not copy vendor update to clipboard.");
-    }
-  };
-
-  const handleVendorRegenerate = async () => {
-    if (!lastBullets || lastBullets.length === 0) {
-      alert("No previous Gmail messages to regenerate from.");
-      return;
-    }
-    await runVendorUpdate(lastBullets);
   };
 
   // --- UI ------------------------------------------------------------------
@@ -279,18 +229,14 @@ export default function AuroraEA() {
           {loadingRecap ? "Generating recap…" : "Schedule client recap"}
         </Button>
 
-        <Button
-          variant="outline"
-          onClick={handleVendorUpdate}
-          disabled={loadingVendor}
-        >
+        <Button onClick={handleVendorUpdate} disabled={loadingVendor}>
           {loadingVendor ? "Generating vendor update…" : "Draft vendor update"}
         </Button>
       </div>
 
-      {/* Last recap section */}
+      {/* Last recap + bullets */}
       <div className="mt-6 border rounded-lg p-4 bg-muted/40">
-        <div className="text-sm font-semibold mb-2">Last recap</div>
+        <div className="text-sm font-semibold mb-2">Last recap / vendor update</div>
         <div className="text-sm whitespace-pre-line">
           {lastRecap
             ? lastRecap
@@ -309,9 +255,18 @@ export default function AuroraEA() {
             </ul>
           </div>
         )}
+
+        {vendorDraft && (
+          <div className="mt-4 border-t pt-3">
+            <div className="text-xs font-semibold text-muted-foreground mb-1">
+              Vendor update draft
+            </div>
+            <div className="text-sm whitespace-pre-line">{vendorDraft}</div>
+          </div>
+        )}
       </div>
 
-      {/* Recap modal */}
+      {/* Modal for recap / vendor preview */}
       {recapModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white text-black dark:bg-neutral-900 dark:text-neutral-50 max-w-2xl w-full mx-4 rounded-xl shadow-lg p-6">
@@ -322,32 +277,14 @@ export default function AuroraEA() {
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={handleCopyRecap}>
-                {copyLabel}
-              </Button>
+              <Button onClick={handleCopyRecap}>{copyLabel}</Button>
               <Button onClick={handleRegenerateRecap} disabled={loadingRecap}>
                 {loadingRecap ? "Generating…" : "Regenerate"}
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setRecapModalOpen(false)}
-              >
-                Close
-              </Button>
+              <Button onClick={() => setRecapModalOpen(false)}>Close</Button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Vendor modal (Option A – same pattern as recap) */}
-      {vendorModalOpen && (
-        <VendorModal
-          text={vendorDraft || ""}
-          loading={loadingVendor}
-          onCopy={handleVendorCopy}
-          onRegenerate={handleVendorRegenerate}
-          onClose={() => setVendorModalOpen(false)}
-        />
       )}
     </div>
   );
