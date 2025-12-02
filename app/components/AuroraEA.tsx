@@ -1,27 +1,43 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+
+// RELATIVE imports so we don’t rely on @ alias
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
+
+type Meeting = {
+  id: string;
+  title: string;
+  start?: string;
+  end?: string;
+};
 
 export default function AuroraEA() {
   // Gmail / meetings basic stats
   const [unread, setUnread] = useState<number>(0);
   const [gmailConnected, setGmailConnected] = useState<boolean>(false);
-  const [meetings] = useState<number>(0); // placeholder until Outlook is wired
 
-  // Recap state
+  const [meetingsCount, setMeetingsCount] = useState<number>(0);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState<boolean>(false);
+  const [showMeetingsList, setShowMeetingsList] = useState<boolean>(false);
+
+  // Recap & vendor update state
   const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
   const [recapModalOpen, setRecapModalOpen] = useState<boolean>(false);
   const [lastRecap, setLastRecap] = useState<string | null>(null);
   const [lastBullets, setLastBullets] = useState<string[]>([]);
   const [copyLabel, setCopyLabel] = useState<string>("Copy");
 
-  // Vendor update state
-  const [loadingVendor, setLoadingVendor] = useState<boolean>(false);
+  const [loadingVendor, setLoadingVendor] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<string | null>(null);
+  const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
+  const [copyVendorLabel, setCopyVendorLabel] = useState("Copy");
 
-  // Load unread count + connection status on mount
+  // ---------------------------------------------------------------------------
+  // Load unread + meetings on mount
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const loadUnread = async () => {
       try {
@@ -38,11 +54,38 @@ export default function AuroraEA() {
       }
     };
 
+    const loadMeetings = async () => {
+      try {
+        setLoadingMeetings(true);
+        const res = await fetch("/api/gmail/meetings");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (!data.connected) {
+          setMeetingsCount(0);
+          setMeetings([]);
+          return;
+        }
+
+        const list: Meeting[] = data.meetings || [];
+        setMeetings(list);
+        setMeetingsCount(data.count ?? list.length ?? 0);
+      } catch (err) {
+        console.error("Error loading meetings:", err);
+        setMeetingsCount(0);
+        setMeetings([]);
+      } finally {
+        setLoadingMeetings(false);
+      }
+    };
+
     loadUnread();
+    loadMeetings();
   }, []);
 
-  // --- Recap pipeline helpers ---------------------------------------------
-
+  // ---------------------------------------------------------------------------
+  // Recap pipeline helpers
+  // ---------------------------------------------------------------------------
   const generateRecapFromBullets = async (bullets: string[]) => {
     if (!bullets || bullets.length === 0) return;
 
@@ -72,13 +115,11 @@ export default function AuroraEA() {
     }
   };
 
-  // Step 1: Fetch recent Gmail messages -> bullets
   const handleScheduleRecap = async () => {
     setLoadingRecap(true);
     setCopyLabel("Copy");
 
     try {
-      // currently using last 24h inbox in /api/gmail/messages – no client filter here
       const res = await fetch("/api/gmail/messages");
       if (!res.ok) {
         console.error("Error from /api/gmail/messages:", await res.text());
@@ -130,21 +171,18 @@ export default function AuroraEA() {
     await generateRecapFromBullets(lastBullets);
   };
 
+  // ---------------------------------------------------------------------------
+  // Vendor update pipeline
+  // ---------------------------------------------------------------------------
   const handleVendorUpdate = async () => {
     try {
       setLoadingVendor(true);
+      setCopyVendorLabel("Copy");
 
       let bullets = lastBullets;
 
-      // If we don't already have bullets from a recap, fetch them now
       if (!bullets || bullets.length === 0) {
         const emailsRes = await fetch("/api/gmail/messages");
-        if (!emailsRes.ok) {
-          console.error("Error from /api/gmail/messages:", await emailsRes.text());
-          alert("Error fetching Gmail messages. Please try again.");
-          return;
-        }
-
         const emailsData = await emailsRes.json();
 
         if (!emailsData.connected || !emailsData.bullets?.length) {
@@ -172,9 +210,9 @@ export default function AuroraEA() {
       }
 
       const json = await res.json();
-      setVendorDraft(json.vendorUpdate || "");
-      setRecapModalOpen(true);
-      setLastRecap(json.vendorUpdate || "");
+      const text = json.vendorUpdate || "";
+      setVendorDraft(text);
+      setVendorModalOpen(true);
     } catch (err) {
       console.error(err);
       alert("Something went wrong generating the vendor update.");
@@ -183,57 +221,109 @@ export default function AuroraEA() {
     }
   };
 
-  // --- UI ------------------------------------------------------------------
+  const handleCopyVendor = async () => {
+    if (!vendorDraft) return;
+    try {
+      await navigator.clipboard.writeText(vendorDraft);
+      setCopyVendorLabel("Copied!");
+      setTimeout(() => setCopyVendorLabel("Copy"), 1500);
+    } catch (err) {
+      console.error("Clipboard error:", err);
+      alert("Could not copy vendor update.");
+    }
+  };
 
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+  const formatTime = (iso?: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  };
+
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
   return (
-    <div className="w-full px-4 py-8 space-y-8">
+    <div className="w-full px-4 py-8 space-y-8 max-w-6xl mx-auto">
       {/* Top stats row */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Gmail / unread */}
         <Card>
- 
           <CardContent className="p-6 flex items-center justify-between">
-    <div>
-      <div className="text-sm text-muted-foreground">Unread Emails</div>
-      <div className="text-3xl font-bold mt-2">{unread}</div>
-      <div className="text-xs text-muted-foreground mt-1">
-        {gmailConnected ? "Gmail connected" : "Gmail not connected"}
-      </div>
-    </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-neutral-500">
+                Unread Emails
+              </div>
+              <div className="text-3xl font-bold mt-1">{unread}</div>
+              <div className="text-xs text-neutral-500 mt-1">
+                {gmailConnected ? "Gmail connected" : "Connect Gmail"}
+              </div>
+            </div>
 
-        {!gmailConnected && (
-      <Button
-        onClick={() => {
-          // Kick off NextAuth Google sign-in
-          window.location.href = "/api/auth/signin/google";
-        }}
-      >
-        Connect Gmail
-      </Button>
-    )}
-  </CardContent>
-</Card>
+            {!gmailConnected && (
+              <Button
+                onClick={() => {
+                  window.location.href = "/api/auth/signin/google";
+                }}
+              >
+                Connect Gmail
+              </Button>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Meetings placeholder */}
+        {/* Meetings (from Google Calendar) */}
         <Card>
           <CardContent className="p-6 flex items-center justify-between">
             <div>
-              <div className="text-sm text-muted-foreground">Meetings</div>
-              <div className="text-3xl font-bold mt-2">{meetings}</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Next 24 hours
+              <div className="text-xs uppercase tracking-wide text-neutral-500">
+                Meetings
+              </div>
+              <div className="text-3xl font-bold mt-1">
+                {loadingMeetings ? "…" : meetingsCount}
+              </div>
+              <div className="text-xs text-neutral-500 mt-1">
+                Next 24 hours (Google Calendar)
               </div>
             </div>
-            <Button
-              onClick={() =>
-                alert("Outlook integration will be wired up in the next phase.")
-              }
-            >
-              Connect Outlook
-            </Button>
+
+            {meetingsCount > 0 && (
+              <Button
+                onClick={() => setShowMeetingsList((prev) => !prev)}
+              >
+                {showMeetingsList ? "Hide details" : "View details"}
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Optional meetings list */}
+      {showMeetingsList && meetingsCount > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <div className="text-sm font-semibold mb-1">
+              Upcoming meetings (next 24 hours)
+            </div>
+            <ul className="space-y-1 text-sm">
+              {meetings.map((m) => (
+                <li
+                  key={m.id}
+                  className="flex items-center justify-between border-b border-neutral-200 last:border-b-0 py-1"
+                >
+                  <span className="truncate pr-4">{m.title}</span>
+                  <span className="text-xs text-neutral-500">
+                    {formatTime(m.start)}{" "}
+                    {m.end ? `– ${formatTime(m.end)}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions row */}
       <div className="flex flex-wrap gap-3">
@@ -242,47 +332,56 @@ export default function AuroraEA() {
         </Button>
 
         <Button onClick={handleVendorUpdate} disabled={loadingVendor}>
-          {loadingVendor ? "Generating vendor update…" : "Draft vendor update"}
+          {loadingVendor ? "Drafting vendor update…" : "Draft vendor update"}
         </Button>
       </div>
 
-      {/* Last recap + bullets */}
-      <div className="mt-6 border rounded-lg p-4 bg-muted/40">
-        <div className="text-sm font-semibold mb-2">Last recap / vendor update</div>
+      {/* Last recap / vendor update section */}
+      <div className="mt-6 border rounded-lg p-4 bg-neutral-50 space-y-4">
+        <div className="text-sm font-semibold mb-1">
+          Last recap / vendor update
+        </div>
+
         <div className="text-sm whitespace-pre-line">
           {lastRecap
             ? lastRecap
             : "No recap generated yet. Click “Schedule client recap” to create one from your recent Gmail threads."}
         </div>
 
+        {vendorDraft && (
+          <div className="border-t border-neutral-200 pt-3 text-sm whitespace-pre-line">
+            <div className="font-semibold mb-1">Vendor update draft</div>
+            {vendorDraft}
+          </div>
+        )}
+
         {lastBullets.length > 0 && (
           <div className="mt-3">
-            <div className="text-xs font-semibold text-muted-foreground mb-1">
+            <div className="text-xs font-semibold text-neutral-500 mb-1">
               Source bullets (from Gmail)
             </div>
-            <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
+            <ul className="list-disc pl-4 text-xs text-neutral-500 space-y-1">
               {lastBullets.map((b, i) => (
                 <li key={i}>{b}</li>
               ))}
             </ul>
           </div>
         )}
-
-        {vendorDraft && (
-          <div className="mt-4 border-t pt-3">
-            <div className="text-xs font-semibold text-muted-foreground mb-1">
-              Vendor update draft
-            </div>
-            <div className="text-sm whitespace-pre-line">{vendorDraft}</div>
-          </div>
-        )}
       </div>
 
-      {/* Modal for recap / vendor preview */}
+      {/* Recap modal */}
       {recapModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white text-black dark:bg-neutral-900 dark:text-neutral-50 max-w-2xl w-full mx-4 rounded-xl shadow-lg p-6">
-            <div className="text-lg font-semibold mb-4">Client recap</div>
+          <div className="bg-white text-black max-w-2xl w-full mx-4 rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-lg font-semibold">Client recap</div>
+              <button
+                className="text-sm text-neutral-500 hover:text-neutral-800"
+                onClick={() => setRecapModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
 
             <div className="border rounded-md p-3 h-80 overflow-y-auto text-sm whitespace-pre-line">
               {lastRecap}
@@ -294,6 +393,38 @@ export default function AuroraEA() {
                 {loadingRecap ? "Generating…" : "Regenerate"}
               </Button>
               <Button onClick={() => setRecapModalOpen(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vendor modal */}
+      {vendorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white text-black max-w-2xl w-full mx-4 rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-lg font-semibold">Vendor update</div>
+              <button
+                className="text-sm text-neutral-500 hover:text-neutral-800"
+                onClick={() => setVendorModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="border rounded-md p-3 h-80 overflow-y-auto text-sm whitespace-pre-line">
+              {vendorDraft}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button onClick={handleCopyVendor}>{copyVendorLabel}</Button>
+              <Button
+                onClick={handleVendorUpdate}
+                disabled={loadingVendor}
+              >
+                {loadingVendor ? "Generating…" : "Regenerate"}
+              </Button>
+              <Button onClick={() => setVendorModalOpen(false)}>Close</Button>
             </div>
           </div>
         </div>
