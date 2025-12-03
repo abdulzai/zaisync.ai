@@ -1,36 +1,29 @@
 import "./globals.css";
-import { headers } from 'next/headers';
-import { Providers } from './providers';
+import type { Metadata } from "next";
+import React from "react";
+import Sidebar from "./components/Sidebar";
 
-export const dynamic = 'force-dynamic';
-
-function resolveOrigin(): string | undefined {
-  const env =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXTAUTH_URL;
-  if (env && /^https?:\/\//.test(env)) return env.replace(/\/+$/, '');
-  try {
-    const h = headers();
-    const host = h.get('x-forwarded-host') ?? h.get('host');
-    const proto = h.get('x-forwarded-proto') ?? 'https';
-    if (host) return `${proto}://${host}`;
-  } catch {}
-  return undefined;
-}
-
-const origin = resolveOrigin();
-
-export const metadata = {
-  metadataBase: origin ? new URL(origin) : undefined,
-  title: 'Aurora EA',
-  description: 'Enterprise-secure, human-in-the-loop executive assistant.',
+export const metadata: Metadata = {
+  title: "Aurora EA",
+  description: "Gmail + meetings copilot",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
+      <body className="min-h-screen bg-gradient-to-br from-zinc-950 via-slate-950 to-black text-white antialiased">
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-10">
+              {children}
+            </div>
+          </main>
+        </div>
       </body>
     </html>
   );
