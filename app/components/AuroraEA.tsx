@@ -381,7 +381,40 @@ export default function AuroraEA() {
                 ✕
               </button>
             </div>
+            
+{/* Calendar Modal */}
+{calendarModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="bg-white dark:bg-neutral-900 rounded-xl max-w-xl w-full mx-4 p-6 shadow-lg">
+      <div className="text-lg font-semibold mb-4">Next 24 hours — Calendar</div>
 
+      <div className="h-80 overflow-y-auto space-y-4 text-sm">
+        {calendarEvents.length === 0 && <div>No meetings in the next 24 hours.</div>}
+
+        {calendarEvents.map((ev) => (
+          <div key={ev.id} className="border rounded-md p-3">
+            <div className="font-semibold">{ev.summary}</div>
+            <div className="text-xs mt-1 text-muted-foreground">
+              {new Date(ev.start).toLocaleString()} →{" "}
+              {new Date(ev.end).toLocaleString()}
+            </div>
+            {ev.location && (
+              <div className="text-xs mt-1 text-muted-foreground">
+                📍 {ev.location}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <Button variant="outline" onClick={() => setCalendarModal(false)}>
+          Close
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
             <div className="border rounded-xl p-3 h-80 overflow-y-auto text-sm whitespace-pre-line bg-black/5 dark:bg-black/40">
               {lastRecap}
             </div>
