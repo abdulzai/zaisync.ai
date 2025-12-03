@@ -1,43 +1,40 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-
-// RELATIVE imports so we don’t rely on @ alias
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
+import FeedbackModal from "./FeedbackModal";
 
-type Meeting = {
-  id: string;
-  title: string;
-  start?: string;
-  end?: string;
-};
+const DEMO_BULLETS = [
+  "Client recap: Intersect Power – follow-up on SOC onboarding timeline and QA on incident runbooks.",
+  "Vendor: MSSP – finalize monitoring scope for BESS sites before year-end.",
+  "Internal: Radian OT team – align on 2026 roadmap and hiring priorities.",
+  "Client: DESRI – update on CIP med support transition and open RFIs.",
+  "Finance: Budget checkpoint for AI tooling spend and MSS renewals.",
+];
 
 export default function AuroraEA() {
   // Gmail / meetings basic stats
   const [unread, setUnread] = useState<number>(0);
   const [gmailConnected, setGmailConnected] = useState<boolean>(false);
+  const [meetings] = useState<number>(0); // placeholder for future calendar wiring
 
-  const [meetingsCount, setMeetingsCount] = useState<number>(0);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [loadingMeetings, setLoadingMeetings] = useState<boolean>(false);
-  const [showMeetingsList, setShowMeetingsList] = useState<boolean>(false);
-
-  // Recap & vendor update state
+  // Recap / vendor state
   const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
   const [recapModalOpen, setRecapModalOpen] = useState<boolean>(false);
+  const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
   const [lastRecap, setLastRecap] = useState<string | null>(null);
   const [lastBullets, setLastBullets] = useState<string[]>([]);
   const [copyLabel, setCopyLabel] = useState<string>("Copy");
-
+  const [vendorCopyLabel, setVendorCopyLabel] = useState<string>("Copy");
   const [loadingVendor, setLoadingVendor] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<string | null>(null);
-  const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
-  const [copyVendorLabel, setCopyVendorLabel] = useState("Copy");
 
-  // ---------------------------------------------------------------------------
-  // Load unread + meetings on mount
-  // ---------------------------------------------------------------------------
+  // Early access helpers
+  const [demoMode, setDemoMode] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  // Load unread count + connection status on mount
   useEffect(() => {
     const loadUnread = async () => {
       try {
@@ -54,38 +51,11 @@ export default function AuroraEA() {
       }
     };
 
-    const loadMeetings = async () => {
-      try {
-        setLoadingMeetings(true);
-        const res = await fetch("/api/gmail/meetings");
-        if (!res.ok) return;
-
-        const data = await res.json();
-        if (!data.connected) {
-          setMeetingsCount(0);
-          setMeetings([]);
-          return;
-        }
-
-        const list: Meeting[] = data.meetings || [];
-        setMeetings(list);
-        setMeetingsCount(data.count ?? list.length ?? 0);
-      } catch (err) {
-        console.error("Error loading meetings:", err);
-        setMeetingsCount(0);
-        setMeetings([]);
-      } finally {
-        setLoadingMeetings(false);
-      }
-    };
-
     loadUnread();
-    loadMeetings();
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Recap pipeline helpers
-  // ---------------------------------------------------------------------------
+  // --- Shared recap pipeline helper ----------------------------------------
+
   const generateRecapFromBullets = async (bullets: string[]) => {
     if (!bullets || bullets.length === 0) return;
 
@@ -115,34 +85,45 @@ export default function AuroraEA() {
     }
   };
 
+  // --- Handlers ------------------------------------------------------------
+
+  // Step 1: Fetch recent Gmail messages -> bullets (or demo data)
   const handleScheduleRecap = async () => {
     setLoadingRecap(true);
     setCopyLabel("Copy");
 
     try {
-      const res = await fetch("/api/gmail/messages");
-      if (!res.ok) {
-        console.error("Error from /api/gmail/messages:", await res.text());
-        alert("Error fetching Gmail messages. Please try again.");
-        return;
+      let bullets: string[] = [];
+
+      if (demoMode) {
+        bullets = DEMO_BULLETS;
+      } else {
+        const res = await fetch("/api/gmail/messages");
+        if (!res.ok) {
+          console.error("Error from /api/gmail/messages:", await res.text());
+          alert("Error fetching Gmail messages. Please try again.");
+          return;
+        }
+
+        const data = await res.json();
+
+        if (!data.connected) {
+          alert("Please connect Gmail first, then try again.");
+          return;
+        }
+
+        if (!data.bullets || data.bullets.length === 0) {
+          alert(
+            "No recent Gmail messages found to build a recap. Try sending yourself a test email and then click again."
+          );
+          return;
+        }
+
+        bullets = data.bullets;
       }
 
-      const data = await res.json();
-
-      if (!data.connected) {
-        alert("Please connect Gmail first, then try again.");
-        return;
-      }
-
-      if (!data.bullets || data.bullets.length === 0) {
-        alert(
-          "No recent Gmail messages found to build a recap. Try sending yourself a test email and then click again."
-        );
-        return;
-      }
-
-      setLastBullets(data.bullets);
-      await generateRecapFromBullets(data.bullets);
+      setLastBullets(bullets);
+      await generateRecapFromBullets(bullets);
     } catch (err) {
       console.error("Error fetching Gmail messages:", err);
       alert("Error fetching Gmail messages. Please try again.");
@@ -151,49 +132,30 @@ export default function AuroraEA() {
     }
   };
 
-  const handleCopyRecap = async () => {
-    if (!lastRecap) return;
-    try {
-      await navigator.clipboard.writeText(lastRecap);
-      setCopyLabel("Copied!");
-      setTimeout(() => setCopyLabel("Copy"), 1500);
-    } catch (err) {
-      console.error("Clipboard error:", err);
-      alert("Could not copy to clipboard.");
-    }
-  };
-
-  const handleRegenerateRecap = async () => {
-    if (!lastBullets || lastBullets.length === 0) {
-      alert("No previous Gmail messages to regenerate from.");
-      return;
-    }
-    await generateRecapFromBullets(lastBullets);
-  };
-
-  // ---------------------------------------------------------------------------
-  // Vendor update pipeline
-  // ---------------------------------------------------------------------------
   const handleVendorUpdate = async () => {
     try {
       setLoadingVendor(true);
-      setCopyVendorLabel("Copy");
+      setVendorCopyLabel("Copy");
 
       let bullets = lastBullets;
 
       if (!bullets || bullets.length === 0) {
-        const emailsRes = await fetch("/api/gmail/messages");
-        const emailsData = await emailsRes.json();
+        if (demoMode) {
+          bullets = DEMO_BULLETS;
+        } else {
+          const emailsRes = await fetch("/api/gmail/messages");
+          const emailsData = await emailsRes.json();
 
-        if (!emailsData.connected || !emailsData.bullets?.length) {
-          alert(
-            "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
-          );
-          return;
+          if (!emailsData.connected || !emailsData.bullets?.length) {
+            alert(
+              "No recent Gmail messages found to build a vendor update. Try sending yourself a test email and then click again."
+            );
+            return;
+          }
+
+          bullets = emailsData.bullets;
+          setLastBullets(emailsData.bullets);
         }
-
-        bullets = emailsData.bullets;
-        setLastBullets(emailsData.bullets);
       }
 
       const res = await fetch("/api/ai/vendor-update", {
@@ -210,8 +172,7 @@ export default function AuroraEA() {
       }
 
       const json = await res.json();
-      const text = json.vendorUpdate || "";
-      setVendorDraft(text);
+      setVendorDraft(json.vendorUpdate || "");
       setVendorModalOpen(true);
     } catch (err) {
       console.error(err);
@@ -221,178 +182,220 @@ export default function AuroraEA() {
     }
   };
 
+  const handleCopyRecap = async () => {
+    if (!lastRecap) return;
+    try {
+      await navigator.clipboard.writeText(lastRecap);
+      setCopyLabel("Copied!");
+      setTimeout(() => setCopyLabel("Copy"), 1500);
+    } catch (err) {
+      console.error("Clipboard error:", err);
+      alert("Could not copy to clipboard.");
+    }
+  };
+
   const handleCopyVendor = async () => {
     if (!vendorDraft) return;
     try {
       await navigator.clipboard.writeText(vendorDraft);
-      setCopyVendorLabel("Copied!");
-      setTimeout(() => setCopyVendorLabel("Copy"), 1500);
+      setVendorCopyLabel("Copied!");
+      setTimeout(() => setVendorCopyLabel("Copy"), 1500);
     } catch (err) {
       console.error("Clipboard error:", err);
-      alert("Could not copy vendor update.");
+      alert("Could not copy to clipboard.");
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-  const formatTime = (iso?: string) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const handleRegenerateRecap = async () => {
+    if (!lastBullets || lastBullets.length === 0) {
+      alert("No previous Gmail messages to regenerate from.");
+      return;
+    }
+    await generateRecapFromBullets(lastBullets);
   };
 
-  // ---------------------------------------------------------------------------
-  // UI
-  // ---------------------------------------------------------------------------
+  // --- UI ------------------------------------------------------------------
+
   return (
-    <div className="w-full px-4 py-8 space-y-8 max-w-6xl mx-auto">
-      {/* Top stats row */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Gmail / unread */}
-        <Card>
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-neutral-500">
-                Unread Emails
-              </div>
-              <div className="text-3xl font-bold mt-1">{unread}</div>
-              <div className="text-xs text-neutral-500 mt-1">
-                {gmailConnected ? "Gmail connected" : "Connect Gmail"}
-              </div>
-            </div>
-
-            {!gmailConnected && (
-              <Button
-                onClick={() => {
-                  window.location.href = "/api/auth/signin/google";
-                }}
-              >
-                Connect Gmail
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Meetings (from Google Calendar) */}
-        <Card>
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-neutral-500">
-                Meetings
-              </div>
-              <div className="text-3xl font-bold mt-1">
-                {loadingMeetings ? "…" : meetingsCount}
-              </div>
-              <div className="text-xs text-neutral-500 mt-1">
-                Next 24 hours (Google Calendar)
-              </div>
-            </div>
-
-            {meetingsCount > 0 && (
-              <Button
-                onClick={() => setShowMeetingsList((prev) => !prev)}
-              >
-                {showMeetingsList ? "Hide details" : "View details"}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Optional meetings list */}
-      {showMeetingsList && meetingsCount > 0 && (
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-semibold mb-1">
-              Upcoming meetings (next 24 hours)
-            </div>
-            <ul className="space-y-1 text-sm">
-              {meetings.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between border-b border-neutral-200 last:border-b-0 py-1"
-                >
-                  <span className="truncate pr-4">{m.title}</span>
-                  <span className="text-xs text-neutral-500">
-                    {formatTime(m.start)}{" "}
-                    {m.end ? `– ${formatTime(m.end)}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Actions row */}
-      <div className="flex flex-wrap gap-3">
-        <Button onClick={handleScheduleRecap} disabled={loadingRecap}>
-          {loadingRecap ? "Generating recap…" : "Schedule client recap"}
-        </Button>
-
-        <Button onClick={handleVendorUpdate} disabled={loadingVendor}>
-          {loadingVendor ? "Drafting vendor update…" : "Draft vendor update"}
-        </Button>
-      </div>
-
-      {/* Last recap / vendor update section */}
-      <div className="mt-6 border rounded-lg p-4 bg-neutral-50 space-y-4">
-        <div className="text-sm font-semibold mb-1">
-          Last recap / vendor update
+    <>
+      <div className="space-y-6 md:space-y-8">
+        {/* Header row */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+              Daily control room
+            </h1>
+            <p className="text-sm text-zinc-400 mt-1">
+              Turn noisy Gmail + calendar chaos into clean briefs you can paste
+              straight into Slack, Teams, or email.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
+              Early access · v0.1
+            </span>
+            <Button variant="outline" onClick={() => setFeedbackOpen(true)}>
+              Give feedback
+            </Button>
+          </div>
         </div>
 
-        <div className="text-sm whitespace-pre-line">
-          {lastRecap
-            ? lastRecap
-            : "No recap generated yet. Click “Schedule client recap” to create one from your recent Gmail threads."}
+        {/* Top stats row */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Gmail / unread */}
+          <Card className="border-white/10 bg-white/5/10 bg-gradient-to-br from-white/5 via-white/0 to-emerald-500/5 backdrop-blur-sm rounded-2xl shadow-lg">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-medium text-zinc-400">
+                  Unread Emails
+                </div>
+                <div className="text-4xl font-semibold mt-2 tracking-tight">
+                  {unread}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  {gmailConnected ? "Gmail connected" : "Connect Gmail"}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                {gmailConnected ? null : (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      window.location.href = "/api/auth/signin/google";
+                    }}
+                  >
+                    Connect Gmail
+                  </Button>
+                )}
+                <label className="flex items-center gap-2 text-[11px] text-zinc-500">
+                  <input
+                    type="checkbox"
+                    className="h-3 w-3 rounded border-zinc-500/50 bg-black/40"
+                    checked={demoMode}
+                    onChange={(e) => setDemoMode(e.target.checked)}
+                  />
+                  <span>Use demo data (for testers)</span>
+                </label>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Meetings placeholder */}
+          <Card className="border-white/10 bg-white/5/10 bg-gradient-to-br from-white/5 via-white/0 to-sky-500/5 backdrop-blur-sm rounded-2xl shadow-lg">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-medium text-zinc-400">
+                  Meetings
+                </div>
+                <div className="text-4xl font-semibold mt-2 tracking-tight">
+                  {meetings}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  Next 24 hours (Google Calendar – coming soon)
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  alert("Calendar integration will be wired in the next phase.")
+                }
+              >
+                Preview calendar view
+              </Button>
+            </CardContent>
+          </Card>
         </div>
 
-        {vendorDraft && (
-          <div className="border-t border-neutral-200 pt-3 text-sm whitespace-pre-line">
-            <div className="font-semibold mb-1">Vendor update draft</div>
-            {vendorDraft}
-          </div>
-        )}
+        {/* Actions row */}
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={handleScheduleRecap} disabled={loadingRecap}>
+            {loadingRecap ? "Generating recap…" : "Schedule client recap"}
+          </Button>
 
-        {lastBullets.length > 0 && (
-          <div className="mt-3">
-            <div className="text-xs font-semibold text-neutral-500 mb-1">
-              Source bullets (from Gmail)
-            </div>
-            <ul className="list-disc pl-4 text-xs text-neutral-500 space-y-1">
-              {lastBullets.map((b, i) => (
-                <li key={i}>{b}</li>
-              ))}
-            </ul>
+          <Button onClick={handleVendorUpdate} disabled={loadingVendor}>
+            {loadingVendor ? "Drafting vendor update…" : "Draft vendor update"}
+          </Button>
+        </div>
+
+        {/* Last recap / vendor section */}
+        <div className="mt-2 rounded-2xl border border-white/10 bg-white/5/10 backdrop-blur-sm px-4 py-4 md:px-6 md:py-5">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold">Last recap / vendor update</div>
+            {lastRecap || vendorDraft ? (
+              <span className="text-[11px] text-zinc-500">
+                Generated from recent Gmail threads
+              </span>
+            ) : null}
           </div>
-        )}
+
+          <div className="text-sm whitespace-pre-line space-y-4">
+            <div>
+              <div className="font-semibold text-xs uppercase text-zinc-400 mb-1">
+                Client recap
+              </div>
+              {lastRecap
+                ? lastRecap
+                : 'No recap generated yet. Click "Schedule client recap" to create one from your recent Gmail threads.'}
+            </div>
+
+            {vendorDraft && (
+              <div className="pt-3 border-t border-white/5">
+                <div className="font-semibold text-xs uppercase text-zinc-400 mb-1">
+                  Vendor update draft
+                </div>
+                {vendorDraft}
+              </div>
+            )}
+          </div>
+
+          {lastBullets.length > 0 && (
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-zinc-400 mb-1">
+                Source bullets (from Gmail)
+              </div>
+              <ul className="list-disc pl-4 text-xs text-zinc-500 space-y-1">
+                {lastBullets.map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Recap modal */}
       {recapModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white text-black max-w-2xl w-full mx-4 rounded-xl shadow-lg p-6">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white text-black dark:bg-neutral-900 dark:text-neutral-50 max-w-2xl w-full mx-4 rounded-2xl shadow-2xl border border-white/10 p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-lg font-semibold">Client recap</div>
+              <div>
+                <div className="text-sm font-semibold">Client recap</div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  Paste directly into email, Slack, or Teams.
+                </div>
+              </div>
               <button
-                className="text-sm text-neutral-500 hover:text-neutral-800"
                 onClick={() => setRecapModalOpen(false)}
+                className="text-zinc-500 hover:text-zinc-300 text-sm"
               >
                 ✕
               </button>
             </div>
 
-            <div className="border rounded-md p-3 h-80 overflow-y-auto text-sm whitespace-pre-line">
+            <div className="border rounded-xl p-3 h-80 overflow-y-auto text-sm whitespace-pre-line bg-black/5 dark:bg-black/40">
               {lastRecap}
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button onClick={handleCopyRecap}>{copyLabel}</Button>
+              <Button variant="outline" onClick={handleCopyRecap}>
+                {copyLabel}
+              </Button>
               <Button onClick={handleRegenerateRecap} disabled={loadingRecap}>
                 {loadingRecap ? "Generating…" : "Regenerate"}
               </Button>
-              <Button onClick={() => setRecapModalOpen(false)}>Close</Button>
+              <Button variant="outline" onClick={() => setRecapModalOpen(false)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>
@@ -400,35 +403,50 @@ export default function AuroraEA() {
 
       {/* Vendor modal */}
       {vendorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white text-black max-w-2xl w-full mx-4 rounded-xl shadow-lg p-6">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white text-black dark:bg-neutral-900 dark:text-neutral-50 max-w-2xl w-full mx-4 rounded-2xl shadow-2xl border border-white/10 p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-lg font-semibold">Vendor update</div>
+              <div>
+                <div className="text-sm font-semibold">Vendor update</div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  Clear, 1–2 scrolls. Ready to paste into your vendor thread.
+                </div>
+              </div>
               <button
-                className="text-sm text-neutral-500 hover:text-neutral-800"
                 onClick={() => setVendorModalOpen(false)}
+                className="text-zinc-500 hover:text-zinc-300 text-sm"
               >
                 ✕
               </button>
             </div>
 
-            <div className="border rounded-md p-3 h-80 overflow-y-auto text-sm whitespace-pre-line">
+            <div className="border rounded-xl p-3 h-80 overflow-y-auto text-sm whitespace-pre-line bg-black/5 dark:bg-black/40">
               {vendorDraft}
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button onClick={handleCopyVendor}>{copyVendorLabel}</Button>
+              <Button variant="outline" onClick={handleCopyVendor}>
+                {vendorCopyLabel}
+              </Button>
               <Button
                 onClick={handleVendorUpdate}
                 disabled={loadingVendor}
               >
                 {loadingVendor ? "Generating…" : "Regenerate"}
               </Button>
-              <Button onClick={() => setVendorModalOpen(false)}>Close</Button>
+              <Button
+                variant="outline"
+                onClick={() => setVendorModalOpen(false)}
+              >
+                Close
+              </Button>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      {/* Feedback modal */}
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+    </>
   );
 }
