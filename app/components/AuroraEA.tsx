@@ -280,30 +280,35 @@ export default function AuroraEA() {
             </CardContent>
           </Card>
 
-          {/* Meetings placeholder */}
-          <Card className="border-white/10 bg-white/5/10 bg-gradient-to-br from-white/5 via-white/0 to-sky-500/5 backdrop-blur-sm rounded-2xl shadow-lg">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-medium text-zinc-400">
-                  Meetings
-                </div>
-                <div className="text-4xl font-semibold mt-2 tracking-tight">
-                  {meetings}
-                </div>
-                <div className="text-xs text-zinc-500 mt-1">
-                  Next 24 hours (Google Calendar – coming soon)
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  alert("Calendar integration will be wired in the next phase.")
-                }
-              >
-                Preview calendar view
-              </Button>
-            </CardContent>
-          </Card>
+         {/* Meetings module */}
+<Card className="border-white/10 bg-white/5 backdrop-blur-sm rounded-2xl shadow-lg">
+  <CardContent className="p-6 flex items-center justify-between">
+    <div className="space-y-1.5">
+      <div className="text-xs font-medium text-zinc-400 flex items-center gap-2">
+        <span>Meetings</span>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+          coming soon
+        </span>
+      </div>
+
+      <div className="text-4xl font-semibold mt-1 tracking-tight">
+        {meetings}
+      </div>
+
+      <div className="text-xs text-zinc-500">
+        Next 24 hours (Google Calendar)
+      </div>
+    </div>
+
+    <Button
+      variant="secondary"
+      className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-4 py-2"
+      onClick={() => alert("Calendar integration coming soon — early tester mode enabled.")}
+    >
+      Preview calendar view
+    </Button>
+  </CardContent>
+</Card>
         </div>
 
         {/* Actions row */}
