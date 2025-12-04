@@ -42,25 +42,55 @@ const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
   const [demoMode, setDemoMode] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
-  // Load unread count + connection status on mount
-  useEffect(() => {
-    const loadUnread = async () => {
-      try {
-        const res = await fetch("/api/gmail/unread");
-        if (!res.ok) return;
+  // Load unread count + meetings + connection status
+useEffect(() => {
+  const loadData = async () => {
+    // Demo mode: fake data, no network calls
+    if (useDemoData) {
+      setGmailConnected(true);
+      setUnread(18749);
+      setMeetings(3);
+      return;
+    }
 
+    // Real Gmail unread
+    try {
+      const res = await fetch("/api/gmail/unread");
+      if (res.ok) {
         const data = await res.json();
         setGmailConnected(!!data.connected);
         setUnread(typeof data.unread === "number" ? data.unread : 0);
-      } catch (err) {
-        console.error("Error loading Gmail unread info:", err);
+      } else {
         setGmailConnected(false);
         setUnread(0);
       }
-    };
+    } catch (err) {
+      console.error("Error loading Gmail unread info:", err);
+      setGmailConnected(false);
+      setUnread(0);
+    }
 
-    loadUnread();
-  }, []);
+    // Real meetings (Google Calendar)
+    try {
+      setLoadingMeetings(true);
+      const res = await fetch("/api/google/calendar");
+      if (res.ok) {
+        const data = await res.json();
+        const count = Array.isArray(data.meetings) ? data.meetings.length : 0;
+        setMeetings(count);
+      } else {
+        setMeetings(0);
+      }
+    } catch (err) {
+      console.error("Error loading meetings:", err);
+      setMeetings(0);
+    } finally {
+      setLoadingMeetings(false);
+    }
+  };
+
+  loadData();
+}, [useDemoData]);
 
   // --- Shared recap pipeline helper ----------------------------------------
 
