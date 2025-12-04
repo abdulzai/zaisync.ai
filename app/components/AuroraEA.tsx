@@ -14,7 +14,7 @@ const DEMO_BULLETS = [
 ];
 
 export default function AuroraEA() {
-  // Gmail / meetings basic stats
+ // Gmail / meetings basic stats
 const [unread, setUnread] = useState<number>(0);
 const [gmailConnected, setGmailConnected] = useState<boolean>(false);
 const [meetings, setMeetings] = useState<number>(0);
@@ -23,24 +23,20 @@ const [loadingMeetings, setLoadingMeetings] = useState<boolean>(false);
 // Early-access tester toggle
 const [useDemoData, setUseDemoData] = useState<boolean>(false);
 
-// Recap state
+// Recap / vendor state
 const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
+const [recapModalOpen, setRecapModalOpen] = useState<boolean>(false);
+const [lastRecap, setLastRecap] = useState<string | null>(null);
+const [lastBullets, setLastBullets] = useState<string[]>([]);
+const [copyLabel, setCopyLabel] = useState<string>("Copy");
 
-  // Recap / vendor state
-  const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
-  const [recapModalOpen, setRecapModalOpen] = useState<boolean>(false);
-  const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
-  const [lastRecap, setLastRecap] = useState<string | null>(null);
-  const [lastBullets, setLastBullets] = useState<string[]>([]);
-  const [copyLabel, setCopyLabel] = useState<string>("Copy");
-  const [vendorCopyLabel, setVendorCopyLabel] = useState<string>("Copy");
-  const [loadingVendor, setLoadingVendor] = useState(false);
-  const [vendorDraft, setVendorDraft] = useState<string | null>(null);
-  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+const [loadingVendor, setLoadingVendor] = useState<boolean>(false);
+const [vendorDraft, setVendorDraft] = useState<string | null>(null);
+const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
 
-  // Early access helpers
-  const [demoMode, setDemoMode] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+// Calendar preview modal
+const [calendarModalOpen, setCalendarModalOpen] = useState<boolean>(false);
+const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
 
   // Load unread count + meetings + connection status
 useEffect(() => {
