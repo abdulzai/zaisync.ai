@@ -129,7 +129,7 @@ useEffect(() => {
     try {
       let bullets: string[] = [];
 
-      if (useDemoMode) {
+      if (useDemoData) {
         bullets = DEMO_BULLETS;
       } else {
         const res = await fetch("/api/gmail/messages");
@@ -174,7 +174,7 @@ useEffect(() => {
       let bullets = lastBullets;
 
       if (!bullets || bullets.length === 0) {
-        if (useDemoMode) {
+        if (useDemoData) {
           bullets = DEMO_BULLETS;
         } else {
           const emailsRes = await fetch("/api/gmail/messages");
