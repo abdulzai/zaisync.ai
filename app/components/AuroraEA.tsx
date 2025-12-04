@@ -29,6 +29,7 @@ export default function AuroraEA() {
   const [vendorCopyLabel, setVendorCopyLabel] = useState<string>("Copy");
   const [loadingVendor, setLoadingVendor] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<string | null>(null);
+  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
 
   // Early access helpers
   const [demoMode, setDemoMode] = useState(false);
@@ -302,9 +303,7 @@ export default function AuroraEA() {
 
     <Button
   className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-4 py-2"
-  onClick={() =>
-    alert("Calendar integration coming soon — early tester mode enabled.")
-  }
+  onClick={() => setCalendarModalOpen(true)}
 >
   Preview calendar view
 </Button>
@@ -389,32 +388,33 @@ export default function AuroraEA() {
             </div>
             
 {/* Calendar Modal */}
-{calendarModal && (
+{calendarModalOpen && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
     <div className="bg-white dark:bg-neutral-900 rounded-xl max-w-xl w-full mx-4 p-6 shadow-lg">
       <div className="text-lg font-semibold mb-4">Next 24 hours — Calendar</div>
 
-      <div className="h-80 overflow-y-auto space-y-4 text-sm">
-        {calendarEvents.length === 0 && <div>No meetings in the next 24 hours.</div>}
+      <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
+        Calendar integration is coming soon. In early access, this is just a
+        preview of where your upcoming meetings timeline will live.
+      </p>
 
-        {calendarEvents.map((ev) => (
-          <div key={ev.id} className="border rounded-md p-3">
-            <div className="font-semibold">{ev.summary}</div>
-            <div className="text-xs mt-1 text-muted-foreground">
-              {new Date(ev.start).toLocaleString()} →{" "}
-              {new Date(ev.end).toLocaleString()}
-            </div>
-            {ev.location && (
-              <div className="text-xs mt-1 text-muted-foreground">
-                📍 {ev.location}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      <ul className="space-y-2 text-sm">
+        <li className="flex items-center justify-between">
+          <span className="text-zinc-400">09:00</span>
+          <span>Stand-up / Daily check-in</span>
+        </li>
+        <li className="flex items-center justify-between">
+          <span className="text-zinc-400">13:00</span>
+          <span>Client touchpoint (placeholder)</span>
+        </li>
+        <li className="flex items-center justify-between">
+          <span className="text-zinc-400">16:30</span>
+          <span>Wrap-up / planning (placeholder)</span>
+        </li>
+      </ul>
 
-      <div className="mt-4 flex justify-end">
-        <Button variant="outline" onClick={() => setCalendarModal(false)}>
+      <div className="mt-6 flex justify-end">
+        <Button variant="outline" onClick={() => setCalendarModalOpen(false)}>
           Close
         </Button>
       </div>
