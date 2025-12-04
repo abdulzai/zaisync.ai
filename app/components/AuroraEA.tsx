@@ -301,12 +301,13 @@ export default function AuroraEA() {
     </div>
 
     <Button
-      variant="secondary"
-      className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-4 py-2"
-      onClick={() => alert("Calendar integration coming soon — early tester mode enabled.")}
-    >
-      Preview calendar view
-    </Button>
+  className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-4 py-2"
+  onClick={() =>
+    alert("Calendar integration coming soon — early tester mode enabled.")
+  }
+>
+  Preview calendar view
+</Button>
   </CardContent>
 </Card>
         </div>
