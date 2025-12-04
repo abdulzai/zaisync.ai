@@ -15,9 +15,16 @@ const DEMO_BULLETS = [
 
 export default function AuroraEA() {
   // Gmail / meetings basic stats
-  const [unread, setUnread] = useState<number>(0);
-  const [gmailConnected, setGmailConnected] = useState<boolean>(false);
-  const [meetings] = useState<number>(0); // placeholder for future calendar wiring
+const [unread, setUnread] = useState<number>(0);
+const [gmailConnected, setGmailConnected] = useState<boolean>(false);
+const [meetings, setMeetings] = useState<number>(0);
+const [loadingMeetings, setLoadingMeetings] = useState<boolean>(false);
+
+// Early-access tester toggle
+const [useDemoData, setUseDemoData] = useState<boolean>(false);
+
+// Recap state
+const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
 
   // Recap / vendor state
   const [loadingRecap, setLoadingRecap] = useState<boolean>(false);
