@@ -29,6 +29,7 @@ const [recapModalOpen, setRecapModalOpen] = useState<boolean>(false);
 const [lastRecap, setLastRecap] = useState<string | null>(null);
 const [lastBullets, setLastBullets] = useState<string[]>([]);
 const [copyLabel, setCopyLabel] = useState<string>("Copy");
+const [vendorCopyLabel, setVendorCopyLabel] = useState<string>("Copy");
 
 const [loadingVendor, setLoadingVendor] = useState<boolean>(false);
 const [vendorDraft, setVendorDraft] = useState<string | null>(null);
