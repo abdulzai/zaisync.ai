@@ -5,6 +5,27 @@ import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import FeedbackModal from "./FeedbackModal";
 
+// Simple type + demo events for calendar preview
+type AutomationFrequency = "none" | "daily" | "weekly";
+
+const DEMO_EVENTS = [
+  {
+    time: "9:00 – 9:30",
+    title: "Radian x Intersect Power – SOC / OT sync",
+    location: "Zoom",
+  },
+  {
+    time: "11:00 – 11:45",
+    title: "Vendor check-in – MSSP monthly review",
+    location: "Teams",
+  },
+  {
+    time: "14:00 – 15:00",
+    title: "Client recap & action review",
+    location: "Google Meet",
+  },
+];
+
 const DEMO_BULLETS = [
   "Client recap: Intersect Power – follow-up on SOC onboarding timeline and QA on incident runbooks.",
   "Vendor: MSSP – finalize monitoring scope for BESS sites before year-end.",
@@ -35,7 +56,10 @@ const [loadingVendor, setLoadingVendor] = useState<boolean>(false);
 const [vendorDraft, setVendorDraft] = useState<string | null>(null);
 const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
 const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false);
-  
+
+   // Calendar preview modal
+const [calendarModalOpen, setCalendarModalOpen] = useState<boolean>(false);
+ 
     // Demo mode (fake data for testers)
 const [demoMode, setDemoMode] = useState<boolean>(false);
 
@@ -43,6 +67,10 @@ const [demoMode, setDemoMode] = useState<boolean>(false);
 const [calendarModalOpen, setCalendarModalOpen] = useState<boolean>(false);
 const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
 
+  // Simple automation setting (UI only for now)
+const [automationFrequency, setAutomationFrequency] =
+    useState<AutomationFrequency>("none");
+  
   // Load unread count + meetings + connection status
 useEffect(() => {
   const loadData = async () => {
@@ -53,6 +81,29 @@ useEffect(() => {
       setMeetings(3);
       return;
     }
+    
+  // Load automation setting from localStorage on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem("auroraEA_automation");
+      if (saved === "daily" || saved === "weekly" || saved === "none") {
+        setAutomationFrequency(saved);
+      }
+    } catch (e) {
+      console.warn("Unable to read automation setting", e);
+    }
+  }, []);
+
+  // Persist automation setting when it changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("auroraEA_automation", automationFrequency);
+    } catch {
+      // ignore
+    }
+  }, [automationFrequency]);
 
     // Real Gmail unread
     try {
@@ -313,7 +364,7 @@ useEffect(() => {
                     checked={demoMode}
                     onChange={(e) => setDemoMode(e.target.checked)}
                   />
-                  <span>Use demo data (for testers)</span>
+                  <span>Use demo data (no real Gmail)</span>
                 </label>
               </div>
             </CardContent>
@@ -370,7 +421,7 @@ useEffect(() => {
               </span>
             ) : null}
           </div>
-
+      
           <div className="text-sm whitespace-pre-line space-y-4">
             <div>
               <div className="font-semibold text-xs uppercase text-zinc-400 mb-1">
@@ -424,7 +475,32 @@ useEffect(() => {
                 ✕
               </button>
             </div>
-            
+
+                    {/* Automation controls */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-zinc-800/80 rounded-lg px-3 py-2 bg-black/20">
+          <div className="space-y-0.5">
+            <div className="text-xs font-semibold text-zinc-300">
+              Automation
+            </div>
+            <div className="text-xs text-zinc-500">
+              Choose how often Aurora EA should draft a recap from your inbox.
+              (For now this is a saved preference — the backend scheduler comes
+              next.)
+            </div>
+          </div>
+          <select
+            className="mt-1 text-xs bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 outline-none"
+            value={automationFrequency}
+            onChange={(e) =>
+              setAutomationFrequency(e.target.value as AutomationFrequency)
+            }
+          >
+            <option value="none">No automation (manual only)</option>
+            <option value="daily">Daily recap · 8:00am</option>
+            <option value="weekly">Weekly recap · Monday 8:00am</option>
+          </select>
+        </div>
+
 {/* Calendar Modal */}
 {calendarModalOpen && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -514,6 +590,59 @@ useEffect(() => {
               <Button
                 variant="outline"
                 onClick={() => setVendorModalOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* Calendar preview modal (demo only) */}
+      {calendarModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-neutral-900 rounded-xl max-w-xl w-full mx-4 p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-lg font-semibold">
+                Next 24 hours — calendar preview
+              </div>
+              <button
+                className="text-xs text-zinc-400 hover:text-zinc-200"
+                onClick={() => setCalendarModalOpen(false)}
+              >
+                Esc
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-500 mb-4">
+              This is a demo view for early testers. We’ll pull your real Google
+              Calendar events here in a future version.
+            </p>
+
+            <div className="space-y-3 text-sm">
+              {DEMO_EVENTS.map((event, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-start justify-between rounded-lg border border-zinc-800/80 bg-zinc-900/60 px-3 py-2"
+                >
+                  <div>
+                    <div className="text-xs text-zinc-400">{event.time}</div>
+                    <div className="text-sm font-medium mt-0.5">
+                      {event.title}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      {event.location}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCalendarModalOpen(false)}
               >
                 Close
               </Button>
