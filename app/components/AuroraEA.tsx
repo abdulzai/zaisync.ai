@@ -638,7 +638,7 @@ useEffect(() => {
             <div className="mt-5 flex justify-end">
               <Button
                 variant="outline"
-                size="sm"
+                className="h-8 px-3 text-sm"
                 onClick={() => setCalendarModalOpen(false)}
               >
                 Close
