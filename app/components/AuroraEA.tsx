@@ -56,9 +56,6 @@ const [loadingVendor, setLoadingVendor] = useState<boolean>(false);
 const [vendorDraft, setVendorDraft] = useState<string | null>(null);
 const [vendorModalOpen, setVendorModalOpen] = useState<boolean>(false);
 const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false);
-
-   // Calendar preview modal
-const [calendarModalOpen, setCalendarModalOpen] = useState<boolean>(false);
  
     // Demo mode (fake data for testers)
 const [demoMode, setDemoMode] = useState<boolean>(false);
